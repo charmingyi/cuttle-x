@@ -1,5 +1,6 @@
 import { TARGET_IDS } from "@/core/nodes"
 import type { TargetId } from "@/core/nodes"
+import { recordAudit } from "./audit-log"
 import { deliveryResponse } from "./delivery-response"
 import { subscriptionDelivery } from "./subscription-services"
 
@@ -40,6 +41,16 @@ export async function serveSubscription(request: Request, token: string): Promis
           nodeCount: delivery.artifact.nodeCount,
           stale: delivery.stale,
           durationMs: Date.now() - startedAt,
+        })
+        // The leak story: a token delivered to some IP is the first fact a compromised link surfaces.
+        void recordAudit("delivery", {
+          subscriptionId: delivery.subscription.id,
+          name: delivery.subscription.name,
+          target: delivery.artifact.target,
+          nodeCount: delivery.artifact.nodeCount,
+          ip:
+            request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For") ?? "",
+          ua: (request.headers.get("User-Agent") ?? "").slice(0, 200),
         })
         return deliveryResponse(delivery)
       }

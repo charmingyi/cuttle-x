@@ -533,7 +533,7 @@ export function NodeManager() {
                   onChange={toggleAllSelected}
                   className="size-4 accent-foreground"
                 />
-                全选
+                <span className="hidden sm:inline">全选</span>
               </label>
               <span className="text-xs text-muted-foreground">已选 {selected.size} 个</span>
               <Button
@@ -544,7 +544,8 @@ export function NodeManager() {
                 onClick={handleBatchDelete}
               >
                 <IconTrash data-icon="inline-start" />
-                批量删除
+                <span className="hidden sm:inline">批量删除</span>
+                <span className="sm:hidden">删除</span>
               </Button>
             </>
           ) : (
@@ -556,16 +557,22 @@ export function NodeManager() {
                 onChange={toggleAllSelected}
                 className="size-4 accent-foreground"
               />
-              全选
+              <span className="hidden sm:inline">全选</span>
             </label>
           )}
-          <Button size="xs" variant="outline" onClick={() => setImportOpen(true)}>
+          <Button
+            size="xs"
+            variant="outline"
+            title="导入分享链接"
+            onClick={() => setImportOpen(true)}
+          >
             <IconCloudDownload data-icon="inline-start" />
-            导入分享链接
+            <span className="hidden sm:inline">导入分享链接</span>
           </Button>
           <Button size="xs" onClick={openCreate}>
             <IconPlus data-icon="inline-start" />
-            新建节点
+            <span className="hidden sm:inline">新建节点</span>
+            <span className="sm:hidden">新建</span>
           </Button>
         </div>
       </div>

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as NodesRouteImport } from './routes/nodes'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as ApiSessionRouteImport } from './routes/api/session'
@@ -23,6 +24,11 @@ import { Route as ApiV1SubscriptionsIdTokenRouteImport } from './routes/api/v1/s
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NodesRoute = NodesRouteImport.update({
@@ -76,6 +82,7 @@ const ApiV1SubscriptionsIdTokenRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/nodes': typeof NodesRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/api/session': typeof ApiSessionRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/nodes': typeof NodesRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/api/session': typeof ApiSessionRoute
@@ -101,6 +109,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/nodes': typeof NodesRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/api/session': typeof ApiSessionRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audit'
     | '/nodes'
     | '/subscriptions'
     | '/api/session'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/audit'
     | '/nodes'
     | '/subscriptions'
     | '/api/session'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/audit'
     | '/nodes'
     | '/subscriptions'
     | '/api/session'
@@ -152,6 +164,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuditRoute: typeof AuditRoute
   NodesRoute: typeof NodesRoute
   SubscriptionsRoute: typeof SubscriptionsRoute
   ApiSessionRoute: typeof ApiSessionRoute
@@ -166,6 +179,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/nodes': {
@@ -262,6 +282,7 @@ const ApiV1SubscriptionsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuditRoute: AuditRoute,
   NodesRoute: NodesRoute,
   SubscriptionsRoute: SubscriptionsRoute,
   ApiSessionRoute: ApiSessionRoute,

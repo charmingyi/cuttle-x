@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers"
 import { adminThrottle } from "./admin-throttle"
+import { recordAudit } from "./audit-log"
 
 /** workerd's own addition to WebCrypto; the DOM lib this project also compiles against omits it. */
 const subtle = crypto.subtle as SubtleCrypto & {
@@ -56,7 +57,20 @@ export async function authorizeAdminRequest(request: Request): Promise<AdminAuth
   ])
   if (subtle.timingSafeEqual(providedHash, expectedHash)) {
     throttle.clear()
+    // The session proof route is the only place an administrator "logs in"; every other authorized
+    // request is a subsequent API call and would just be noise in the log.
+    if (new URL(request.url).pathname === "/api/session") {
+      void recordAudit("auth_login", auditContext(request))
+    }
     return "authorized"
   }
+  // Wrong credential: the audit entry is the detection story for a leaked or brute-forced token.
+  void recordAudit("auth_failed", auditContext(request))
   return throttle.fail() ? "rate_limited" : "unauthorized"
+}
+
+function auditContext(request: Request): Record<string, unknown> {
+  const ip = request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For") ?? ""
+  const ua = request.headers.get("User-Agent") ?? ""
+  return { ip: ip.slice(0, 45), ua: ua.slice(0, 200), path: new URL(request.url).pathname }
 }

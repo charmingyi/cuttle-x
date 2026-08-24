@@ -147,14 +147,16 @@ describe("the removeNodes and reorderNodes operations", () => {
 
   test("removeNodes deletes exactly the requested ids", async () => {
     const ids = await seed()
-    const result = await removeNodes({ ids: [ids[0]!, ids[2]!] })
+    const [first, second, third, fourth] = ids
+    if (!first || !second || !third || !fourth) throw new Error("expected 4 seeded ids")
+    const result = await removeNodes({ ids: [first, third] })
     expect(result.deleted).toBe(2)
     const remaining = await createNodeRepository(env.DB).list()
     const remainingIds = new Set(remaining.map((node) => node.id))
-    expect(remainingIds.has(ids[0]!)).toBe(false)
-    expect(remainingIds.has(ids[1]!)).toBe(true)
-    expect(remainingIds.has(ids[2]!)).toBe(false)
-    expect(remainingIds.has(ids[3]!)).toBe(true)
+    expect(remainingIds.has(first)).toBe(false)
+    expect(remainingIds.has(second)).toBe(true)
+    expect(remainingIds.has(third)).toBe(false)
+    expect(remainingIds.has(fourth)).toBe(true)
   })
 
   test("removeNodes refuses an empty id list", async () => {
@@ -172,8 +174,9 @@ describe("the removeNodes and reorderNodes operations", () => {
     // reorder states the full new order; the shared DB may hold rows from earlier tests, so
     // assert against the list as it stands rather than only the nodes this test seeded.
     const repository = createNodeRepository(env.DB)
-    const before = (await repository.list()).map((node) => node.id)
-    const reversed = [...before].reverse()
+    const listed = await repository.list()
+    const before = listed.map((node) => node.id)
+    const reversed = before.toReversed()
     await reorderNodes({ ids: reversed })
     const after = await repository.list()
     expect(after.map((node) => node.id)).toStrictEqual(reversed)

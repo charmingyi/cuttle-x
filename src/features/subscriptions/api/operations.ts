@@ -2,6 +2,7 @@ import { ConflictError, ValidationError } from "@/core/errors"
 import { MAX_SOURCE_SIZE, TARGET_IDS } from "@/core/nodes"
 import type { TargetId } from "@/core/nodes"
 import { isPlausibleToken } from "@/core/subscriptions"
+import { recordAudit } from "@/server/audit-log"
 import { subscriptionPublicOrigin } from "@/server/subscription-origin"
 import { subscriptionDelivery, subscriptionPublishing } from "@/server/subscription-services"
 import { AdminFailure } from "@/shared/admin-error"
@@ -29,6 +30,7 @@ export async function reorderSubscriptions({ ids }: { ids: unknown }): Promise<v
   if (!(await subscriptionPublishing().reorder(ids))) {
     throw new AdminFailure("invalid_request", "订阅列表已变化，请刷新后重试。")
   }
+  void recordAudit("subscription_reorder", { count: ids.length })
 }
 
 export async function getSubscription({ id }: { id: string }): Promise<SubscriptionPayload> {
@@ -111,6 +113,11 @@ export async function createSubscription({
 }): Promise<CredentialPayload> {
   try {
     const { token, ...subscription } = await subscriptionPublishing().publish(draft)
+    void recordAudit("subscription_create", {
+      id: subscription.id,
+      name: subscription.name,
+      defaultTarget: subscription.defaultTarget,
+    })
     return { subscription, token, url: subscriptionUrl(token, origin) }
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -166,6 +173,11 @@ export async function updateSubscription({
   try {
     const subscription = await subscriptionPublishing().update(id, patch)
     if (!subscription) throw new AdminFailure("not_found", "Subscription not found.")
+    void recordAudit("subscription_update", {
+      id: subscription.id,
+      name: subscription.name,
+      enabled: subscription.enabled,
+    })
     return { subscription }
   } catch (error) {
     if (error instanceof ConflictError) {
@@ -205,6 +217,7 @@ export async function removeSubscription({ id }: { id: string }): Promise<void> 
   if (!(await subscriptionPublishing().revoke(id))) {
     throw new AdminFailure("not_found", "Subscription not found.")
   }
+  void recordAudit("subscription_delete", { id })
 }
 
 export async function rotateSubscriptionToken({
@@ -215,9 +228,11 @@ export async function rotateSubscriptionToken({
   origin: string
 }): Promise<CredentialPayload> {
   const rotated = await subscriptionPublishing().rotateToken(id)
-  if (!rotated) throw new AdminFailure("not_found", "Subscription not found.")
+  if (!rotated?.subscription) throw new AdminFailure("not_found", "Subscription not found.")
+  const subscription = rotated.subscription
+  void recordAudit("subscription_rotate", { id: subscription.id, name: subscription.name })
   return {
-    subscription: rotated.subscription,
+    subscription,
     token: rotated.token,
     url: subscriptionUrl(rotated.token, origin),
   }

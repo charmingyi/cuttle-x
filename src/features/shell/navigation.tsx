@@ -1,11 +1,17 @@
-import { IconDatabase, IconMenu2, IconServer2, IconTransform } from "@tabler/icons-react"
+import {
+  IconDatabase,
+  IconHistory,
+  IconMenu2,
+  IconServer2,
+  IconTransform,
+} from "@tabler/icons-react"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import type { ComponentType, RefObject } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTokenUsable } from "@/features/session"
 
-export type AppPage = "extract" | "nodes" | "subscriptions"
+export type AppPage = "extract" | "nodes" | "subscriptions" | "audit"
 
 interface NavEntry {
   /** Reads from the admin API, so it stays hidden until the key works. */
@@ -40,6 +46,14 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "订阅管理",
     compactLabel: "订阅",
     icon: IconDatabase,
+    admin: true,
+  },
+  {
+    page: "audit",
+    to: "/audit",
+    label: "审计日志",
+    compactLabel: "审计",
+    icon: IconHistory,
     admin: true,
   },
 ]

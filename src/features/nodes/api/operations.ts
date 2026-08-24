@@ -1,6 +1,7 @@
 import type { CanonicalNode } from "@/core/nodes"
 import { canonicalToNodeForm, validateNodeForm } from "@/core/nodes/entity"
 import type { NodeFormData } from "@/core/nodes/entity"
+import { recordAudit } from "@/server/audit-log"
 import { nodeRepository } from "@/server/node-services"
 import { AdminFailure } from "@/shared/admin-error"
 import type { NodeListPayload, NodePayload, ImportNodesPayload } from "./contract"
@@ -48,6 +49,13 @@ export async function getNode({ id }: { id: string }): Promise<NodePayload> {
 export async function createNode({ data }: { data: unknown }): Promise<NodePayload> {
   const form = readForm(data)
   const node = await nodeRepository().create(form)
+  void recordAudit("node_create", {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    server: node.server,
+    port: node.port,
+  })
   return { node }
 }
 
@@ -61,13 +69,16 @@ export async function updateNode({
   const form = readForm(data)
   const node = await nodeRepository().update(id, form)
   if (!node) throw new AdminFailure("not_found", "节点不存在。")
+  void recordAudit("node_update", { id: node.id, name: node.name, type: node.type })
   return { node }
 }
 
 export async function removeNode({ id }: { id: string }): Promise<void> {
+  const existing = await nodeRepository().findById(id)
   if (!(await nodeRepository().deleteById(id))) {
     throw new AdminFailure("not_found", "节点不存在。")
   }
+  void recordAudit("node_delete", { id, name: existing?.name ?? null })
 }
 
 export async function removeNodes({ ids }: { ids: string[] }): Promise<{ deleted: number }> {
@@ -78,6 +89,7 @@ export async function removeNodes({ ids }: { ids: string[] }): Promise<{ deleted
     throw new AdminFailure("invalid_request", "一次最多删除 500 个节点。")
   }
   const deleted = await nodeRepository().deleteMany(ids)
+  void recordAudit("node_bulk_delete", { count: deleted })
   return { deleted }
 }
 
@@ -111,5 +123,6 @@ export async function importNodes({
     }
   }
   const created = forms.length > 0 ? await nodeRepository().createMany(forms) : []
+  void recordAudit("node_import", { imported: created.length, errors: errors.length })
   return { imported: created.length, errors, nodes: created }
 }

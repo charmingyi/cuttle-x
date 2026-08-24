@@ -124,15 +124,7 @@ function canonicalCredentials(canonical: CanonicalNode): Record<string, unknown>
   return out
 }
 
-const COMMON_KEYS = new Set([
-  "type",
-  "name",
-  "server",
-  "port",
-  "country",
-  "security",
-  "transport",
-])
+const COMMON_KEYS = new Set(["type", "name", "server", "port", "country", "security", "transport"])
 
 /**
  * Convert a canonical node to the form the node manager persists. Common fields go to top level;
