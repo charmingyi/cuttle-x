@@ -179,7 +179,7 @@ Fork 本仓库，然后打开 fork 的 **Actions** 页面并启用工作流。�
 
 其中，`CUTTLE_TOKEN` 是进入管理面板的唯一凭据；输入后会先经服务端验证，密码只保存在当前浏览器会话。`CUTTLE_LINK_KEY` 用于加密管理面板再次复制固定订阅链接所需的 token。修改它会使旧链接仍可交付，但旧 token 无法自动从面板恢复；可在订阅详情中粘贴原完整链接重新登记，或轮换 token。若部署到公网，请务必为两个密钥都使用足够长、随机且不可预测的字符串，并妥善保存。
 
-`CUTTLE_PUBLIC_ORIGIN` 已在当前部署配置为 `https://cuttle.douni.de`；自托管时请将 `wrangler.json` 中的值改成自己的公开域名。
+`CUTTLE_PUBLIC_ORIGIN` 用于生成固定订阅链接的公开地址（如 `https://your-domain.example`）；自托管时请将 `wrangler.json` 中的值改成自己的公开域名，未配置时使用当前访问域名。
 
 > 四个 Secret 缺一不可。配置不完整时，相关部署步骤将失败或被跳过。
 

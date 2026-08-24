@@ -10,7 +10,7 @@
     "traces": { "enabled": true, "head_sampling_rate": 0.05 }
   },
   "vars": {
-    "CUTTLE_PUBLIC_ORIGIN": "https://cuttle.douni.de"
+    "CUTTLE_PUBLIC_ORIGIN": "https://your-domain.example"
   },
   "assets": {
     "directory": "dist/client",
