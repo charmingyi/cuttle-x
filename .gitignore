@@ -11,6 +11,10 @@ dist/
 .output/
 .tanstack/
 .wrangler/
+.wrangler-check/
+
+# Local agent/assistant config (machine-specific)
+.claude/
 
 
 # ============================================================
