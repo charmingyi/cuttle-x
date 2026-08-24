@@ -13,3 +13,7 @@ export interface ImportNodesPayload {
   errors: Array<{ index: number; message: string }>
   nodes: NodeEntity[]
 }
+
+export interface RemoveNodesPayload {
+  deleted: number
+}

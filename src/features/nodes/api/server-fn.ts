@@ -27,6 +27,16 @@ export const removeNode = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
   .handler(({ data }) => operations.removeNode(data))
 
+export const removeNodes = createServerFn({ method: "POST" })
+  .middleware([adminFunctionMiddleware])
+  .validator((input: { ids: string[] }) => input)
+  .handler(({ data }) => operations.removeNodes(data))
+
+export const reorderNodes = createServerFn({ method: "POST" })
+  .middleware([adminFunctionMiddleware])
+  .validator((input: { ids: string[] }) => input)
+  .handler(({ data }) => operations.reorderNodes(data))
+
 export const importNodes = createServerFn({ method: "POST" })
   .middleware([adminFunctionMiddleware])
   .validator((input: { nodes: unknown }) => input)

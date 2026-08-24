@@ -60,6 +60,29 @@ export function useRemoveNode() {
   })
 }
 
+export function useRemoveNodes() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.removeNodes({ data: { ids } }),
+    onSuccess: async (payload) => {
+      await client.invalidateQueries({ queryKey: keys.nodes })
+      showSuccess(`已删除 ${payload.deleted} 个节点`)
+    },
+    onError: (error) => showError(error, "批量删除失败。"),
+  })
+}
+
+export function useReorderNodes() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.reorderNodes({ data: { ids } }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.nodes })
+    },
+    onError: (error) => showError(error, "排序保存失败。"),
+  })
+}
+
 export function useImportNodes() {
   const client = useQueryClient()
   return useMutation({

@@ -1,15 +1,26 @@
 import {
   IconAlertTriangle,
   IconCloudDownload,
+  IconCopy,
+  IconGripVertical,
   IconLoader2,
   IconNetwork,
   IconPlus,
+  IconQrcode,
   IconServer2,
   IconTrash,
 } from "@tabler/icons-react"
 import { useCallback, useMemo, useState } from "react"
+import { QRCode } from "react-qr-code"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Empty,
   EmptyContent,
@@ -31,10 +42,26 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Textarea } from "@/components/ui/textarea"
 import { inspectNodeList } from "@/core/nodes"
 import type { CanonicalNode } from "@/core/nodes"
-import { KNOWN_PROTOCOLS, PROTOCOL_FIELDS } from "@/core/nodes/entity"
+import { KNOWN_PROTOCOLS, PROTOCOL_FIELDS, nodeToCanonical } from "@/core/nodes/entity"
 import type { NodeEntity, NodeFormData } from "@/core/nodes/entity"
+import { renderUriNode } from "@/core/nodes/targets/shared/uri-node"
 import { useDeferredClose } from "@/shared/deferred-close"
-import { useCreateNode, useImportNodes, useNodes, useRemoveNode, useUpdateNode } from "./queries"
+import { showSuccess } from "@/shared/notify"
+import {
+  useCreateNode,
+  useImportNodes,
+  useNodes,
+  useRemoveNode,
+  useRemoveNodes,
+  useReorderNodes,
+  useUpdateNode,
+} from "./queries"
+
+/** The share link a client can import directly from a scanned code. */
+function nodeShareLink(node: NodeEntity): string {
+  const uri = renderUriNode(nodeToCanonical(node))
+  return uri ?? `${node.type}://${node.server}:${node.port}`
+}
 
 const TOOLBAR_ROW =
   "flex h-12 flex-none items-center justify-between gap-2.5 border-b px-4 md:gap-3 md:px-5"
@@ -245,6 +272,8 @@ export function NodeManager() {
   const create = useCreateNode()
   const update = useUpdateNode()
   const remove = useRemoveNode()
+  const removeMany = useRemoveNodes()
+  const reorder = useReorderNodes()
   const importNodes = useImportNodes()
 
   const [editing, setEditing] = useState<{ node: NodeEntity } | { form: NodeFormData } | null>(null)
@@ -256,6 +285,56 @@ export function NodeManager() {
   const [importText, setImportText] = useState("")
   const [parsedNodes, setParsedNodes] = useState<CanonicalNode[] | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
+
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [qrNode, setQrNode] = useState<NodeEntity | null>(null)
+  const qrOpen = qrNode !== null
+  const qrSurface = useDeferredClose(qrOpen, () => setQrNode(null))
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allSelected = nodes.length > 0 && selected.size === nodes.length
+  const someSelected = selected.size > 0
+
+  function toggleAllSelected() {
+    setSelected(allSelected ? new Set() : new Set(nodes.map((node) => node.id)))
+  }
+
+  function handleBatchDelete() {
+    if (selected.size === 0) return
+    const count = selected.size
+    if (confirm(`确定删除选中的 ${count} 个节点？此操作不可撤销。`)) {
+      removeMany.mutate([...selected], {
+        onSuccess: () => setSelected(new Set()),
+      })
+    }
+  }
+
+  function resetDrag() {
+    setDragId(null)
+    setOverId(null)
+  }
+
+  function handleDrop(targetId: string) {
+    const fromId = dragId
+    resetDrag()
+    if (!fromId || fromId === targetId) return
+    const ids = nodes.map((node) => node.id)
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(targetId)
+    if (from === -1 || to === -1) return
+    ids.splice(to, 0, ids.splice(from, 1)[0])
+    reorder.mutate(ids)
+  }
 
   function handleParse() {
     setParseError(null)
@@ -354,7 +433,43 @@ export function NodeManager() {
     return (
       <div className="flex flex-col divide-y px-4 md:px-5">
         {nodes.map((node) => (
-          <div key={node.id} className="flex items-center gap-3 py-3">
+          <div
+            key={node.id}
+            data-dragging={dragId === node.id}
+            data-over={overId === node.id}
+            onDragOver={(event) => {
+              if (!dragId || dragId === node.id) return
+              event.preventDefault()
+              setOverId(node.id)
+            }}
+            onDragLeave={() => {
+              if (overId === node.id) setOverId(null)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              handleDrop(node.id)
+            }}
+            className="flex items-center gap-2 py-1.5 data-[dragging=true]:opacity-40 data-[over=true]:bg-muted/60 sm:gap-3 sm:py-3"
+          >
+            <input
+              type="checkbox"
+              aria-label={`选择节点 ${node.name}`}
+              checked={selected.has(node.id)}
+              onChange={() => toggleSelected(node.id)}
+              className="size-4 shrink-0 accent-foreground"
+            />
+            <span
+              draggable
+              onDragStart={(event) => {
+                setDragId(node.id)
+                event.dataTransfer.effectAllowed = "move"
+              }}
+              onDragEnd={resetDrag}
+              title="拖动排序"
+              className="cursor-grab shrink-0 touch-none text-muted-foreground active:cursor-grabbing"
+            >
+              <IconGripVertical className="size-4" />
+            </span>
             <IconServer2 className="size-4 shrink-0 text-muted-foreground" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-medium truncate">{node.name}</span>
@@ -364,8 +479,18 @@ export function NodeManager() {
               </span>
             </div>
             <div className="flex shrink-0 gap-1">
+              <Button
+                variant="ghost"
+                size="xs"
+                aria-label={`二维码 ${node.name}`}
+                title="二维码"
+                onClick={() => setQrNode(node)}
+              >
+                <IconQrcode className="size-4" />
+              </Button>
               <Button variant="outline" size="xs" onClick={() => openEdit(node)}>
-                编辑
+                <span className="hidden sm:inline">编辑</span>
+                <span className="sm:hidden">改</span>
               </Button>
               <Button
                 variant="ghost"
@@ -397,7 +522,43 @@ export function NodeManager() {
     <div className="flex flex-1 flex-col">
       <div className={TOOLBAR_ROW}>
         <h1 className={TOOLBAR_TITLE}>节点管理</h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {someSelected ? (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  aria-label="全选"
+                  checked={allSelected}
+                  onChange={toggleAllSelected}
+                  className="size-4 accent-foreground"
+                />
+                全选
+              </label>
+              <span className="text-xs text-muted-foreground">已选 {selected.size} 个</span>
+              <Button
+                size="xs"
+                variant="outline"
+                className="text-destructive"
+                disabled={removeMany.isPending}
+                onClick={handleBatchDelete}
+              >
+                <IconTrash data-icon="inline-start" />
+                批量删除
+              </Button>
+            </>
+          ) : (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                aria-label="全选"
+                checked={false}
+                onChange={toggleAllSelected}
+                className="size-4 accent-foreground"
+              />
+              全选
+            </label>
+          )}
           <Button size="xs" variant="outline" onClick={() => setImportOpen(true)}>
             <IconCloudDownload data-icon="inline-start" />
             导入分享链接
@@ -513,6 +674,39 @@ export function NodeManager() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={qrSurface.open} onOpenChange={qrSurface.onOpenChange}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>节点二维码</DialogTitle>
+            <DialogDescription>
+              {qrNode ? `${qrNode.name} · 用手机客户端扫码导入` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {qrNode ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="rounded border p-3">
+                <QRCode value={nodeShareLink(qrNode)} size={192} fgColor="#0f172a" />
+              </div>
+              <p className="w-full max-w-full break-all rounded bg-muted p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                {nodeShareLink(qrNode)}
+              </p>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(nodeShareLink(qrNode))
+                    .then(() => showSuccess("分享链接已复制"))
+                }}
+              >
+                <IconCopy data-icon="inline-start" />
+                复制链接
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import type { CanonicalNode } from "@/core/nodes"
 import { canonicalToNodeForm, nodeToCanonical } from "@/core/nodes/entity"
 import { inspectNodeList } from "@/core/nodes/pipeline"
 import type { SubscriptionRecord } from "@/core/subscriptions"
-import { importNodes } from "@/features/nodes/api/operations"
+import { importNodes, removeNodes, reorderNodes } from "@/features/nodes/api/operations"
 import {
   editorValuesFromRecord,
   sourceFromValues,
@@ -126,6 +126,61 @@ describe("the importNodes operation", () => {
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0]?.index).toBe(0)
     expect(result.errors[0]?.message).toContain("节点名称")
+  })
+})
+
+describe("the removeNodes and reorderNodes operations", () => {
+  const LIST = [
+    "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@rm1.example.com:8388#Rm1",
+    "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@rm2.example.com:8389#Rm2",
+    "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@rm3.example.com:8390#Rm3",
+    "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@rm4.example.com:8391#Rm4",
+  ]
+
+  async function seed(): Promise<string[]> {
+    const repository = createNodeRepository(env.DB)
+    const created = await repository.createMany(
+      inspectNodeList(LIST.join("\n")).nodes.map(canonicalToNodeForm),
+    )
+    return created.map((node) => node.id)
+  }
+
+  test("removeNodes deletes exactly the requested ids", async () => {
+    const ids = await seed()
+    const result = await removeNodes({ ids: [ids[0]!, ids[2]!] })
+    expect(result.deleted).toBe(2)
+    const remaining = await createNodeRepository(env.DB).list()
+    const remainingIds = new Set(remaining.map((node) => node.id))
+    expect(remainingIds.has(ids[0]!)).toBe(false)
+    expect(remainingIds.has(ids[1]!)).toBe(true)
+    expect(remainingIds.has(ids[2]!)).toBe(false)
+    expect(remainingIds.has(ids[3]!)).toBe(true)
+  })
+
+  test("removeNodes refuses an empty id list", async () => {
+    await expect(removeNodes({ ids: [] })).rejects.toBeInstanceOf(AdminFailure)
+  })
+
+  test("removeNodes refuses more than 500 ids", async () => {
+    await expect(
+      removeNodes({ ids: Array.from({ length: 501 }, (_, i) => `id-${i}`) }),
+    ).rejects.toBeInstanceOf(AdminFailure)
+  })
+
+  test("reorderNodes persists the given order", async () => {
+    await seed()
+    // reorder states the full new order; the shared DB may hold rows from earlier tests, so
+    // assert against the list as it stands rather than only the nodes this test seeded.
+    const repository = createNodeRepository(env.DB)
+    const before = (await repository.list()).map((node) => node.id)
+    const reversed = [...before].reverse()
+    await reorderNodes({ ids: reversed })
+    const after = await repository.list()
+    expect(after.map((node) => node.id)).toStrictEqual(reversed)
+  })
+
+  test("reorderNodes refuses an empty id list", async () => {
+    await expect(reorderNodes({ ids: [] })).rejects.toBeInstanceOf(AdminFailure)
   })
 })
 

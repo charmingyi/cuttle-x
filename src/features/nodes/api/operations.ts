@@ -70,6 +70,24 @@ export async function removeNode({ id }: { id: string }): Promise<void> {
   }
 }
 
+export async function removeNodes({ ids }: { ids: string[] }): Promise<{ deleted: number }> {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AdminFailure("invalid_request", "节点列表不能为空。")
+  }
+  if (ids.length > 500) {
+    throw new AdminFailure("invalid_request", "一次最多删除 500 个节点。")
+  }
+  const deleted = await nodeRepository().deleteMany(ids)
+  return { deleted }
+}
+
+export async function reorderNodes({ ids }: { ids: string[] }): Promise<void> {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AdminFailure("invalid_request", "节点顺序不能为空。")
+  }
+  await nodeRepository().reorder(ids)
+}
+
 export async function importNodes({
   nodes,
 }: {
