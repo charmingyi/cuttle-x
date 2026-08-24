@@ -1,0 +1,8 @@
+# 进入 Cuttle 的单用户密码。
+CUTTLE_TOKEN=replace-with-a-long-random-secret
+
+# 用于加密可恢复订阅 token 的独立密钥；至少 32 字节，修改后旧 token 将无法在管理面板恢复。
+CUTTLE_LINK_KEY=replace-with-an-independent-long-random-secret
+
+# 可选：订阅链接的固定公开域名；留空时使用当前管理请求的域名。
+# CUTTLE_PUBLIC_ORIGIN=https://cuttle.example.com

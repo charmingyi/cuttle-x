@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cuttle-x",
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  },
+  "vars": {
+    "CUTTLE_PUBLIC_ORIGIN": "https://cuttle.douni.de"
+  },
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application"
+  },
+  "secrets": {
+    "required": ["CUTTLE_LINK_KEY", "CUTTLE_TOKEN"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cuttle",
+      "database_id": "04db20fd-b886-4377-a97e-83b146c60780",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

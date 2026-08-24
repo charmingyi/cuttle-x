@@ -1,0 +1,19 @@
+# CuttleX Docker Compose 自托管部署
+#
+# 用法:
+#   1. 复制 .env.example 为 .env 并填写 CUTTLE_TOKEN / CUTTLE_LINK_KEY
+#   2. docker compose up -d --build
+#   3. 访问 http://<服务器IP>:8787
+#
+# 数据保存在 ./data/cuttlex（D1 SQLite），备份该目录即可备份全部数据。
+services:
+  cuttlex:
+    build: .
+    container_name: cuttlex
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    volumes:
+      - ./data/cuttlex:/app/.wrangler/state

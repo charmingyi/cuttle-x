@@ -1,0 +1,211 @@
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { QueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
+import type { TargetId } from "@/core/nodes"
+import type { SubscriptionDraft, SubscriptionSummary } from "@/core/subscriptions"
+import { useTokenUsable } from "@/features/session"
+import { showError, showSuccess } from "@/shared/notify"
+import type { CredentialPayload } from "./api/contract"
+import * as api from "./api/server-fn"
+
+const NO_SUBSCRIPTIONS: SubscriptionSummary[] = []
+
+// Credentials stay out of query keys; connect clears the cache before changing credentials.
+export const keys = {
+  snapshot: (id: string, target: TargetId) => ["subscriptions", id, "snapshot", target] as const,
+  subscription: (id: string) => ["subscriptions", id] as const,
+  subscriptions: ["subscriptions"] as const,
+}
+
+function subscriptionsQuery() {
+  return queryOptions({
+    queryKey: keys.subscriptions,
+    queryFn: () => api.listSubscriptions().then((payload) => payload.subscriptions),
+  })
+}
+
+function subscriptionQuery(id: string) {
+  return queryOptions({
+    queryKey: keys.subscription(id),
+    queryFn: () => api.getSubscription({ data: { id } }).then((payload) => payload.subscription),
+    staleTime: 0,
+  })
+}
+
+function invalidateSubscriptions(client: QueryClient) {
+  return client.invalidateQueries({ queryKey: keys.subscriptions })
+}
+
+export function useSubscriptions() {
+  // A key the API has already refused buys nothing here: the gate is about to take this page away, so
+  // firing the read would only spend a round trip to be told again.
+  const query = useQuery({ ...subscriptionsQuery(), enabled: useTokenUsable() })
+  return {
+    failure: query.error,
+    items: query.data ?? NO_SUBSCRIPTIONS,
+    loaded: query.isSuccess,
+  }
+}
+
+export function useSubscription(id: string | null) {
+  const query = useQuery({ ...subscriptionQuery(id ?? ""), enabled: id !== null })
+
+  useEffect(() => {
+    if (query.error) showError(query.error, "加载订阅失败。")
+  }, [query.error])
+
+  return query.data ?? null
+}
+
+export function useSubscriptionSnapshot(id: string, target: TargetId, enabled: boolean) {
+  const query = useQuery({
+    queryKey: keys.snapshot(id, target),
+    queryFn: () => api.readSubscriptionSnapshot({ data: { id, target } }).then((p) => p.snapshot),
+    enabled,
+  })
+
+  return { failure: query.error, snapshot: query.data ?? null, loaded: query.isSuccess }
+}
+
+type SaveResult = CredentialPayload | undefined
+
+async function discardResult(promise: Promise<unknown>): Promise<undefined> {
+  await promise
+}
+
+export function useSaveSubscription() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ draft, id }: { draft: SubscriptionDraft; id?: string }): Promise<SaveResult> =>
+      id
+        ? discardResult(api.updateSubscription({ data: { id, patch: draft } }))
+        : api.createSubscription({ data: { draft } }),
+    onSuccess: async (_result, { id }) => {
+      await invalidateSubscriptions(client)
+      showSuccess(id ? "订阅已更新" : "订阅已创建", id ? undefined : "请立即保存新生成的订阅地址。")
+    },
+    onError: (error) => showError(error, "保存失败。"),
+  })
+}
+
+export function useAppendSubscriptionNodes() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, content }: { id: string; content: string }) =>
+      api.appendSubscriptionNodes({ data: { id, content } }),
+    onSuccess: async (result) => {
+      await invalidateSubscriptions(client)
+      await client.invalidateQueries({ queryKey: keys.subscription(result.subscription.id) })
+      await client.invalidateQueries({
+        queryKey: keys.snapshot(result.subscription.id, result.subscription.defaultTarget),
+      })
+      const message = result.added > 0 ? `已追加 ${result.added} 个新节点` : "没有新增节点"
+      showSuccess(result.skipped > 0 ? `${message}，另有 ${result.skipped} 条内容未识别` : message)
+    },
+    onError: (error) => showError(error, "追加节点失败。"),
+  })
+}
+
+export function useRegisterSubscriptionLink() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, link }: { id: string; link: string }) =>
+      api.registerSubscriptionLink({ data: { id, link } }),
+    onSuccess: async () => {
+      await invalidateSubscriptions(client)
+      showSuccess("订阅链接已登记，现在可以重复复制")
+    },
+    onError: (error) => showError(error, "登记订阅链接失败。"),
+  })
+}
+
+export function useCopySubscriptionLink() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const result = await api.getSubscriptionLink({ data: { id } })
+      if (!result.url) {
+        throw new Error("这是一条升级前创建的订阅，请先在详情中登记原链接或轮换 token。")
+      }
+      await navigator.clipboard.writeText(result.url)
+      return result.url
+    },
+    onSuccess: () => showSuccess("订阅链接已复制"),
+    onError: (error) => showError(error, "无法复制订阅链接。"),
+  })
+}
+
+export function useRemoveSubscription() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => api.removeSubscription({ data: { id } }),
+    onSuccess: async () => {
+      await invalidateSubscriptions(client)
+      showSuccess("订阅已删除")
+    },
+    onError: (error) => showError(error, "删除失败。"),
+  })
+}
+
+export function useRotateToken() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => api.rotateSubscriptionToken({ data: { id } }),
+    onSuccess: async () => {
+      await invalidateSubscriptions(client)
+      showSuccess("token 已轮换", "旧订阅地址已失效，请保存新的订阅地址。")
+    },
+    onError: (error) => showError(error, "轮换失败。"),
+  })
+}
+
+export function useSetSubscriptionEnabled() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      enabled,
+      subscription,
+    }: {
+      enabled: boolean
+      subscription: SubscriptionSummary
+    }) => api.updateSubscription({ data: { id: subscription.id, patch: { enabled } } }),
+    onSuccess: async (_result, { enabled }) => {
+      await invalidateSubscriptions(client)
+      showSuccess(enabled ? "订阅已启用" : "订阅已停用")
+    },
+    onError: (error) => showError(error, "状态更新失败。"),
+  })
+}
+
+/** The list's inline rename: the update API already accepts a name-only patch. */
+export function useRenameSubscription() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      api.updateSubscription({ data: { id, patch: { name } } }),
+    onSuccess: async () => {
+      await invalidateSubscriptions(client)
+      showSuccess("订阅已重命名")
+    },
+    onError: (error) => showError(error, "重命名失败。"),
+  })
+}
+
+/** One whole-order write per move; the refetch reorders the list on success. */
+export function useReorderSubscriptions() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (ids: string[]) => api.reorderSubscriptions({ data: { ids } }),
+    onSuccess: async () => {
+      await invalidateSubscriptions(client)
+    },
+    onError: (error) => showError(error, "排序失败。"),
+  })
+}
