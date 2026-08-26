@@ -5,6 +5,18 @@ import type { CanonicalNode } from "./types"
  * itself across formats is how one format comes to accept a node another rejects.
  */
 
+/**
+ * The bare hostname behind a bracketed IPv6 literal, however many pairs of brackets arrived.
+ * URL parsers keep the brackets on `.hostname`, and some share links wrap them twice, so the
+ * canonical model must not let a bracket travel in `server` — renderers bracket the address again,
+ * and one extra pair produces a link no client can parse.
+ */
+export function bareHost(input: string): string {
+  let host = input.trim()
+  while (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1)
+  return host
+}
+
 export function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

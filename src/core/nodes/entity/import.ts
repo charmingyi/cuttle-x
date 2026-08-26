@@ -16,6 +16,7 @@ import type { CanonicalNode } from "../types"
  * Everything the table does not name rides verbatim in `extra`, which is what keeps a setting no
  * surface edits alive through the round trip.
  */
+import { bareHost } from "../values"
 import { parseJsonObject } from "./convert"
 import type { NodeEntity, NodeFormData } from "./types"
 
@@ -183,7 +184,9 @@ export function nodeToCanonical(entity: NodeEntity): CanonicalNode {
 
   // Apply top-level fields — always win
   result.type = str(entity.type)
-  result.server = str(entity.server)
+  // A bracket that was persisted with the address (a pre-fix IPv6 import) is stripped here so every
+  // renderer — URI or line config — brackets it exactly once.
+  result.server = bareHost(str(entity.server))
   result.port = int(entity.port) ?? 0
   result.name = str(entity.name)
   if (entity.country) result.country = entity.country

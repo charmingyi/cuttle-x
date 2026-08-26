@@ -1,6 +1,6 @@
 import { effectiveSni } from "../transport"
 import type { CanonicalNode, DraftNode } from "../types"
-import { booleanFlag, integer } from "../values"
+import { bareHost, booleanFlag, integer } from "../values"
 import { applyWireGuardAddresses } from "../wireguard"
 
 /**
@@ -90,7 +90,10 @@ function stated(value: unknown) {
 export function canonicalize(draft: DraftNode): CanonicalNode {
   const sourceType = String(draft.type ?? "")
   const type = canonicalType(sourceType)
-  const server = String(stated(draft.server) ?? stated(draft.address) ?? "")
+  // The canonical server is the bare address: a bracketed IPv6 literal is a rendering concern, and
+  // a bracket that reaches the value once comes out twice after renderers add their own pair back.
+  // `bareHost` strips every surplus pair a non-URI input was written with.
+  const server = bareHost(String(stated(draft.server) ?? stated(draft.address) ?? ""))
   const port = integer(draft.port as string | number, integer(draft.server_port as string | number))
 
   // Everything beyond the four required fields travels through untouched, which is what lets a

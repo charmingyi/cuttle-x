@@ -13,7 +13,7 @@
 import { decodeBase64 } from "../base64"
 import { extractEarlyData } from "../transport"
 import type { CanonicalNode } from "../types"
-import { alpnList, booleanFlag, integer } from "../values"
+import { alpnList, bareHost, booleanFlag, integer } from "../values"
 import { applyWireGuardAddresses } from "../wireguard"
 function decode(value: string | null | undefined, fallback = "") {
   if (!value) return fallback
@@ -46,7 +46,7 @@ function urlNode(url: URL, type: string) {
   const node = named({
     type,
     name: decode(url.hash.slice(1)),
-    server: url.hostname,
+    server: bareHost(url.hostname),
     port: integer(url.port, query.get("security") === "tls" ? 443 : 0),
   })
 
@@ -98,11 +98,14 @@ function parseShadowsocks(line: string) {
   let userInfo = decode(body.slice(0, at))
   if (!userInfo.includes(":")) userInfo = decodeBase64(userInfo)
   const separator = userInfo.indexOf(":")
-  const endpoint = new URL(`http://${body.slice(at + 1)}`)
+  // Some clients export an IPv6 literal twice bracketed (`[[…]]`). The URL parser only accepts the
+  // standard single pair, so normalize before asking it: strip one superfluous pair.
+  const endpointSource = body.slice(at + 1).replace(/^\[\[(.+)\]\]/, "[$1]")
+  const endpoint = new URL(`http://${endpointSource}`)
   const node = named({
     type: "ss",
     name,
-    server: endpoint.hostname,
+    server: bareHost(endpoint.hostname),
     port: integer(endpoint.port),
     cipher: userInfo.slice(0, separator),
     password: userInfo.slice(separator + 1),
@@ -277,7 +280,7 @@ function parseVlessOrTrojan(line: string, type: "vless" | "trojan") {
     // The Xray-family envelope spells the name `remarks` in the query; the standard URI keeps it in
     // the fragment. Whichever one is present states the name.
     name: query.get("remarks") ?? decode(url.hash.slice(1)),
-    server: url.hostname,
+    server: bareHost(url.hostname),
     port: integer(url.port, 443),
     network,
     // Not the shared TLS implication restated: `security=none` is the source stating plaintext, and
@@ -468,7 +471,7 @@ function parseMierus(line: string) {
     const node = named({
       type: "mieru",
       name: query.get("profile") ?? "",
-      server: url.hostname,
+      server: bareHost(url.hostname),
       port: integer(binding.port),
       username: decode(url.username),
       password: decode(url.password),

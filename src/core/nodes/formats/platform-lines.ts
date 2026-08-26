@@ -88,7 +88,11 @@ function options(parts: string[]) {
 }
 
 function endpoint(input: string) {
-  const match = value(input).match(/^\[([^\]]+)]:(\d+)$/) ?? value(input).match(/^(.+):(\d+)$/)
+  // A bracketed IPv6 literal arrives with one or two bracket pairs depending on the exporter. Peel
+  // every superfluous pair before matching, so `[[…]]` yields the bare host like `[…]` does.
+  let text = value(input)
+  while (/^\[\[.+?\]\]/.test(text)) text = text.replace(/^\[\[(.+)\]\]/, "[$1]")
+  const match = text.match(/^\[([^\]]+)]:(\d+)$/) ?? text.match(/^(.+):(\d+)$/)
   if (!match) return null
   return { server: match[1], port: Number(match[2]) }
 }

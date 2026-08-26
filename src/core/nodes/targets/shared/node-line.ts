@@ -14,7 +14,11 @@ export function value(input: unknown) {
 
 /** `host:port`, with an IPv6 literal bracketed. Also what `uri-node.ts` writes an authority with. */
 export function endpoint(node: CanonicalNode) {
-  return `${node.server.includes(":") ? `[${node.server}]` : node.server}:${node.port}`
+  // A bracket that survived into the value (a pre-fix import) must not get a second pair here.
+  const host = node.server
+  const bracketed =
+    host.startsWith("[") && host.endsWith("]") ? host : host.includes(":") ? `[${host}]` : host
+  return `${bracketed}:${node.port}`
 }
 
 export function parameter(name: string, input: unknown) {

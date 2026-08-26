@@ -119,8 +119,9 @@ describe("the Xray-family VLESS share-link envelope", () => {
 
   test("a non-base64 authority (e.g. an IPv6 host) is not mistaken for an envelope", () => {
     // `2001:db8::1` is a valid hostname without `@`; the envelope reader must decline it.
+    // The canonical server is the bare address; every renderer re-brackets exactly once.
     const [node] = inspectNodeList("vless://uuid@[2001:db8::1]:443?type=tcp#v6").nodes
-    expect(node.server).toBe("[2001:db8::1]")
+    expect(node.server).toBe("2001:db8::1")
     expect(node.port).toBe(443)
   })
 })
