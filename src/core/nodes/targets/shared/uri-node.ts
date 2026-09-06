@@ -1,4 +1,4 @@
-import { encodeBase64 } from "../../base64"
+import { encodeBase64, normalizeShadowsocks2022Password } from "../../base64"
 import { uriPlugin } from "../../plugins"
 import { pathWithEarlyData } from "../../transport"
 import type { CanonicalNode } from "../../types"
@@ -48,8 +48,9 @@ export function renderUriNode(node: CanonicalNode) {
     case "ss": {
       // A 2022 cipher's key is already base64; SIP002 carries that pair in plain userinfo, and a
       // client that base64s it a second time reads back a key that decodes to nothing.
-      const credentials = String(node.cipher).startsWith("2022-blake3-")
-        ? `${encodeURIComponent(String(node.cipher))}:${encodeURIComponent(String(node.password ?? ""))}`
+      const password = normalizeShadowsocks2022Password(node.cipher, node.password)
+      const credentials = String(node.cipher).toLowerCase().startsWith("2022-blake3-")
+        ? `${encodeURIComponent(String(node.cipher))}:${encodeURIComponent(String(password ?? ""))}`
         : encodeBase64(`${node.cipher}:${node.password}`)
       return `ss://${credentials}@${endpoint(node)}${queryString([["plugin", uriPlugin(node)]])}${name}`
     }

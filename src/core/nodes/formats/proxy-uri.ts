@@ -10,7 +10,7 @@
  * statement, so deleting one silently gains the node a setting its source refused — and two `udp`
  * writes kept for where they put the key. Each is marked at its own line.
  */
-import { decodeBase64 } from "../base64"
+import { decodeBase64, normalizeShadowsocks2022Password } from "../base64"
 import { extractEarlyData } from "../transport"
 import type { CanonicalNode } from "../types"
 import { alpnList, bareHost, booleanFlag, integer } from "../values"
@@ -102,13 +102,15 @@ function parseShadowsocks(line: string) {
   // standard single pair, so normalize before asking it: strip one superfluous pair.
   const endpointSource = body.slice(at + 1).replace(/^\[\[(.+)\]\]/, "[$1]")
   const endpoint = new URL(`http://${endpointSource}`)
+  const cipher = userInfo.slice(0, separator)
+  const password = normalizeShadowsocks2022Password(cipher, userInfo.slice(separator + 1))
   const node = named({
     type: "ss",
     name,
     server: bareHost(endpoint.hostname),
     port: integer(endpoint.port),
-    cipher: userInfo.slice(0, separator),
-    password: userInfo.slice(separator + 1),
+    cipher,
+    password,
     // A SIP002 URI says nothing about UDP, so it does not imply relaying it; a `udp=` parameter
     // below still turns it on. Every other protocol carries UDP by default.
     udp: false,

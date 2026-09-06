@@ -1,3 +1,4 @@
+import { normalizeShadowsocks2022Password } from "../base64"
 import type { CanonicalNode } from "../types"
 /**
  * Bridging the canonical pipeline model to the editable node form and back.
@@ -189,6 +190,9 @@ export function nodeToCanonical(entity: NodeEntity): CanonicalNode {
   result.server = bareHost(str(entity.server))
   result.port = int(entity.port) ?? 0
   result.name = str(entity.name)
+  if (result.type === "ss") {
+    result.password = normalizeShadowsocks2022Password(result.cipher, result.password)
+  }
   if (entity.country) result.country = entity.country
   if (entity.security) result.security = entity.security
   if (entity.transport) result.transport = entity.transport

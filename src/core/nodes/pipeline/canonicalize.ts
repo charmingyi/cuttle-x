@@ -1,3 +1,4 @@
+import { normalizeShadowsocks2022Password } from "../base64"
 import { effectiveSni } from "../transport"
 import type { CanonicalNode, DraftNode } from "../types"
 import { bareHost, booleanFlag, integer } from "../values"
@@ -159,7 +160,10 @@ export function canonicalize(draft: DraftNode): CanonicalNode {
   // A Shadowsocks node that names no cipher means `none` — a cipher every client knows, which
   // `undefined` is not. Through `stated` rather than plain `??` because an empty one is no cipher
   // either: an SSD document naming no encryption produces one, as does a bare `encrypt-method=`.
-  if (type === "ss") node.cipher = stated(node.cipher) ?? "none"
+  if (type === "ss") {
+    node.cipher = stated(node.cipher) ?? "none"
+    node.password = normalizeShadowsocks2022Password(node.cipher, node.password)
+  }
   const sni = effectiveSni(node)
   if (sni !== undefined) node.sni = sni
 
