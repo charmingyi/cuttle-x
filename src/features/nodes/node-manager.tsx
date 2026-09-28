@@ -59,10 +59,15 @@ import {
   useUpdateNode,
 } from "./queries"
 
-/** The share link a client can import directly from a scanned code. */
-function nodeShareLink(node: NodeEntity): string {
-  const uri = renderUriNode(nodeToCanonical(node))
-  return uri ?? `${node.type}://${node.server}:${node.port}`
+/**
+ * The share link a client can import from a scanned code, or null when the protocol has none.
+ *
+ * Only the protocols `renderUriNode` spells have a link that a client reads back. A
+ * `${type}://host:port` stand-in for the rest — Snell, Mieru, SSH — encodes into a code that looks
+ * scannable and imports nothing, so the dialog says so instead of offering one.
+ */
+function nodeShareLink(node: NodeEntity): string | null {
+  return renderUriNode(nodeToCanonical(node))
 }
 
 const TOOLBAR_ROW =
@@ -317,6 +322,10 @@ export function NodeManager() {
 
   const allSelected = nodes.length > 0 && selected.size === nodes.length
   const someSelected = selected.size > 0
+
+  // Read once per open rather than per use: the dialog renders the link three times, and the node it
+  // shows is fixed for as long as it is open.
+  const qrLink = qrNode ? nodeShareLink(qrNode) : null
 
   function toggleAllSelected() {
     setSelected(allSelected ? new Set() : new Set(nodes.map((node) => node.id)))
@@ -735,7 +744,11 @@ export function NodeManager() {
         </SheetContent>
       </Sheet>
 
-      <Dialog open={qrSurface.open} onOpenChange={qrSurface.onOpenChange}>
+      <Dialog
+        open={qrSurface.open}
+        onOpenChange={qrSurface.onOpenChange}
+        onOpenChangeComplete={qrSurface.onOpenChangeComplete}
+      >
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>节点二维码</DialogTitle>
@@ -743,20 +756,20 @@ export function NodeManager() {
               {qrNode ? `${qrNode.name} · 用手机客户端扫码导入` : ""}
             </DialogDescription>
           </DialogHeader>
-          {qrNode ? (
+          {qrNode && qrLink ? (
             <div className="flex flex-col items-center gap-3">
               <div className="rounded border bg-white p-3">
-                <QRCode value={nodeShareLink(qrNode)} size={192} fgColor="#0f172a" />
+                <QRCode value={qrLink} size={192} fgColor="#0f172a" />
               </div>
               <p className="w-full max-w-full break-all rounded bg-muted p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-                {nodeShareLink(qrNode)}
+                {qrLink}
               </p>
               <Button
                 size="xs"
                 variant="outline"
                 onClick={() => {
                   void navigator.clipboard
-                    .writeText(nodeShareLink(qrNode))
+                    .writeText(qrLink)
                     .then(() => showSuccess("分享链接已复制"))
                 }}
               >
@@ -764,6 +777,12 @@ export function NodeManager() {
                 复制链接
               </Button>
             </div>
+          ) : null}
+          {qrNode && !qrLink ? (
+            <p className="text-xs/relaxed text-muted-foreground">
+              {qrNode.type.toUpperCase()}{" "}
+              没有通用的分享链接格式，无法生成可导入的二维码。请在对应客户端中手动配置该节点。
+            </p>
           ) : null}
         </DialogContent>
       </Dialog>
