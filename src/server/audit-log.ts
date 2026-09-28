@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers"
+import { env, waitUntil } from "cloudflare:workers"
 
 /**
  * Audit log: management operations and subscription deliveries, one row per event.
@@ -55,11 +55,23 @@ function rowToEntry(row: AuditRow): AuditEntry {
   }
 }
 
+/**
+ * Writes one event, and hands the write to the runtime so it survives the response.
+ *
+ * `waitUntil` is not optional here. A delivery answers the moment its body is ready, and the
+ * isolate is free to go away with any promise still pending — a floating write is a coin flip on
+ * whether the row ever lands, which is exactly the audit looking empty while the console shows the
+ * events. Callers keep calling this without awaiting (registering is synchronous and never throws);
+ * the returned promise is there for the callers that want to observe the write, tests included.
+ */
+export function recordAudit(kind: AuditKind, detail: Record<string, unknown> = {}): Promise<void> {
+  const write = writeAudit(kind, detail)
+  waitUntil(write)
+  return write
+}
+
 /** Writes one event; never throws. Details are JSON-serialized and size-capped. */
-export async function recordAudit(
-  kind: AuditKind,
-  detail: Record<string, unknown> = {},
-): Promise<void> {
+async function writeAudit(kind: AuditKind, detail: Record<string, unknown>): Promise<void> {
   try {
     const db = env.DB
     const id = crypto.randomUUID()
