@@ -13,12 +13,16 @@ interface NodeRow {
   credential_json: string
   extra_json: string
   sort_order: number | null
+  last_check_at: string | null
+  last_check_ok: number | null
+  last_check_ms: number | null
   created_at: string
   updated_at: string
 }
 
 const NODE_COLUMNS = `id, name, type, server, port, country, security, transport,
-  credential_json, extra_json, sort_order, created_at, updated_at`
+  credential_json, extra_json, sort_order, last_check_at, last_check_ok, last_check_ms,
+  created_at, updated_at`
 
 function rowToNode(row: NodeRow): NodeEntity {
   return {
@@ -33,6 +37,10 @@ function rowToNode(row: NodeRow): NodeEntity {
     credentialJson: row.credential_json,
     extraJson: row.extra_json,
     sortOrder: row.sort_order ?? null,
+    lastCheckAt: row.last_check_at ?? null,
+    // STRICT table: 0/1 integers, read back as booleans.
+    lastCheckOk: row.last_check_ok === null ? null : row.last_check_ok !== 0,
+    lastCheckMs: row.last_check_ms ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -183,5 +191,28 @@ export function createNodeRepository(db: D1Database): NodeRepository {
     await db.batch(batch)
   }
 
-  return { list, findById, findByIds, create, update, deleteById, deleteMany, createMany, reorder }
+  async function saveCheckResults(
+    results: Array<{ id: string; ok: boolean; ms: number | null; checkedAt: string }>,
+  ): Promise<void> {
+    if (results.length === 0) return
+    const stmt = db.prepare(
+      `UPDATE nodes SET last_check_at = ?, last_check_ok = ?, last_check_ms = ? WHERE id = ?`,
+    )
+    // One statement per node: the probe runs them concurrently elsewhere, so a single batch keeps
+    // the write as one round trip without touching updated_at (a probe is not an edit).
+    await db.batch(results.map((r) => stmt.bind(r.checkedAt, r.ok ? 1 : 0, r.ms, r.id)))
+  }
+
+  return {
+    list,
+    findById,
+    findByIds,
+    create,
+    update,
+    deleteById,
+    deleteMany,
+    createMany,
+    reorder,
+    saveCheckResults,
+  }
 }

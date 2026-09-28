@@ -35,6 +35,7 @@ import type { EditorValues } from "./editor/editor-values"
 import { SubscriptionEditor } from "./editor/subscription-editor"
 import { subscriptionState } from "./labels"
 import {
+  useCheckSubscription,
   useRenameSubscription,
   useReorderSubscriptions,
   useSaveSubscription,
@@ -113,6 +114,7 @@ export function SubscriptionManager() {
   const save = useSaveSubscription()
   const rename = useRenameSubscription()
   const reorder = useReorderSubscriptions()
+  const check = useCheckSubscription()
 
   const activeId = search.mode === "create" ? null : (search.id ?? null)
   const record = useSubscription(activeId)
@@ -182,6 +184,9 @@ export function SubscriptionManager() {
   }
 
   const rowActions: SubscriptionRowActions = {
+    onCheck: (subscription) => check.mutate(subscription.id),
+    // One check at a time: parallel forced recompiles would hammer the upstream for no gain.
+    checking: check.isPending,
     onCopyLink: actions.copySubscriptionLink,
     onEdit: edit,
     onMove: move,

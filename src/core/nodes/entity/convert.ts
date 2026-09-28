@@ -42,6 +42,11 @@ export function nodeFromForm(id: string, data: NodeFormData, now: string): NodeE
     credentialJson: JSON.stringify(credentials),
     extraJson: JSON.stringify(extra),
     sortOrder: null,
+    // A form write creates or replaces the row; probe history is not part of it and starts clean
+    // only for new rows — update() never round-trips through here for existing probe columns.
+    lastCheckAt: null,
+    lastCheckOk: null,
+    lastCheckMs: null,
     createdAt: now,
     updatedAt: now,
   }

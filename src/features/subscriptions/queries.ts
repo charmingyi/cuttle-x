@@ -67,6 +67,27 @@ export function useSubscriptionSnapshot(id: string, target: TargetId, enabled: b
   return { failure: query.error, snapshot: query.data ?? null, loaded: query.isSuccess }
 }
 
+/** The upstream's traffic/expiry header, refreshed after every health check. */
+export function useSubscriptionUserinfo(id: string, enabled: boolean) {
+  const query = useQuery({
+    queryKey: [...keys.subscription(id), "userinfo"],
+    queryFn: () => api.readSubscriptionUserinfo({ data: { id } }).then((p) => p.userinfo),
+    enabled,
+  })
+  return { userinfo: query.data ?? null, loaded: query.isSuccess }
+}
+
+/** The manager's copyable subscription URL; null when the subscription predates link recovery. */
+export function useSubscriptionLink(id: string, enabled: boolean) {
+  const query = useQuery({
+    queryKey: [...keys.subscription(id), "link"],
+    queryFn: () => api.getSubscriptionLink({ data: { id } }).then((p) => p.url ?? null),
+    enabled,
+    staleTime: 60_000,
+  })
+  return { url: query.data ?? null, loaded: query.isSuccess }
+}
+
 type SaveResult = CredentialPayload | undefined
 
 async function discardResult(promise: Promise<unknown>): Promise<undefined> {
@@ -207,5 +228,26 @@ export function useReorderSubscriptions() {
       await invalidateSubscriptions(client)
     },
     onError: (error) => showError(error, "排序失败。"),
+  })
+}
+
+/** The 检查 button: force a recompile now and report what the upstream answered. */
+export function useCheckSubscription() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => api.checkSubscription({ data: { id } }),
+    onSuccess: async (result) => {
+      await invalidateSubscriptions(client)
+      if (result.ok) {
+        showSuccess(
+          `检查通过：${result.nodeCount} 个节点 · ${result.durationMs} ms`,
+          result.stale ? "上游不可用，本次交付的是缓存快照。" : undefined,
+        )
+      } else {
+        showError(new Error(result.error), "检查未通过。")
+      }
+    },
+    onError: (error) => showError(error, "检查失败。"),
   })
 }

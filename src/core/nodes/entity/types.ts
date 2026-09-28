@@ -44,6 +44,12 @@ export interface NodeEntity {
   extraJson: string
   /** Optional list position. */
   sortOrder: number | null
+  /** When the reachability probe last ran; null until the first 拨测. */
+  lastCheckAt: string | null
+  /** Whether the last TCP dial to server:port connected; null means never probed. */
+  lastCheckOk: boolean | null
+  /** Round-trip connect time of the last successful dial, in milliseconds. */
+  lastCheckMs: number | null
   createdAt: string
   updatedAt: string
 }
@@ -80,6 +86,13 @@ export interface NodeRepository {
   createMany(items: NodeFormData[]): Promise<NodeEntity[]>
   /** Reorder nodes by id list. */
   reorder(orderedIds: string[]): Promise<void>
+  /**
+   * Persist probe outcomes in one pass. Each entry overwrites that node's last check; nodes not
+   * listed keep their previous result.
+   */
+  saveCheckResults(
+    results: Array<{ id: string; ok: boolean; ms: number | null; checkedAt: string }>,
+  ): Promise<void>
 }
 
 /** The protocol-specific field labels shown in the node editor UI. */

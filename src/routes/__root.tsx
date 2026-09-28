@@ -4,6 +4,7 @@ import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/reac
 import { Toaster } from "@/components/ui/toast"
 import { NotFound } from "@/features/shell"
 import { htmlNoCache } from "@/middleware/html-no-cache.server"
+import { THEME_BOOTSTRAP } from "@/shared/theme"
 import appCss from "../styles.css?url"
 
 export interface RouterContext {
@@ -27,7 +28,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       },
       {
         name: "description",
-        content: "CuttleX：通用代理节点转换器。提取、处理并发布多客户端订阅。",
+        content: "CuttleX：通用代理节点转换器。管理节点、审计访问并发布多客户端订阅。",
       },
     ],
     links: [
@@ -36,6 +37,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         href: appCss,
       },
     ],
+    // The theme bootstrap must run before first paint; hydration scripts come far later.
+    scripts: [{ children: THEME_BOOTSTRAP }],
   }),
   server: {
     middleware: [htmlNoCache],

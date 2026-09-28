@@ -65,6 +65,16 @@ export const readSubscriptionSnapshot = createServerFn({ method: "POST" })
   .validator((input: { id: string; target: string }) => input)
   .handler(({ data }) => operations.readSubscriptionSnapshot(data))
 
+export const checkSubscription = createServerFn({ method: "POST" })
+  .middleware([adminFunctionMiddleware])
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => operations.checkSubscription(data))
+
+export const readSubscriptionUserinfo = createServerFn({ method: "POST" })
+  .middleware([adminFunctionMiddleware])
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => operations.readSubscriptionUserinfo(data))
+
 export const removeSubscription = createServerFn({ method: "POST" })
   .middleware([adminFunctionMiddleware])
   .validator((input: { id: string }) => input)

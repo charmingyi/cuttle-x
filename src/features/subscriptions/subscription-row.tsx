@@ -4,6 +4,7 @@ import {
   IconEdit,
   IconKey,
   IconLink,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react"
 import type { MouseEvent, ReactNode } from "react"
@@ -20,6 +21,9 @@ export type MoveDirection = "up" | "down"
 
 export interface SubscriptionRowActions {
   onCopyLink: (subscription: SubscriptionSummary) => void
+  onCheck: (subscription: SubscriptionSummary) => void
+  /** True while that subscription's health check is in flight. */
+  checking?: boolean
   onEdit: (subscription: SubscriptionSummary) => void
   /** Moves the subscription one position within the persisted list order. */
   onMove: (subscription: SubscriptionSummary, direction: MoveDirection) => void
@@ -128,6 +132,17 @@ export function RowActions({
         onClick={() => actions.onCopyLink(subscription)}
       >
         <IconLink />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-xs"
+        aria-label="立即检查"
+        title="立即检查上游"
+        disabled={actions.checking}
+        className={compact ? "size-10" : undefined}
+        onClick={() => actions.onCheck(subscription)}
+      >
+        <IconRefresh />
       </Button>
       <Button
         variant="outline"

@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import { Separator } from "@/components/ui/separator"
 import { useTokenUsable } from "@/features/session"
 import { useHydrated } from "@/shared/hydrated"
+import { ThemeToggle } from "@/shared/theme-toggle"
 import { ConnectionDot, ConnectionPanel } from "./connection-panel"
 import { useConnectionPanel } from "./connection-panel-state"
 import { NavMenu, visibleNavEntries } from "./navigation"
@@ -56,6 +57,8 @@ export function AppShell({ active, children }: { active: AppPage; children: Reac
               </Link>
             ))}
             <Separator orientation="vertical" className="h-3.5 lg:h-4" />
+            <ThemeToggle />
+            <Separator orientation="vertical" className="h-3.5 lg:h-4" />
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
@@ -67,6 +70,7 @@ export function AppShell({ active, children }: { active: AppPage; children: Reac
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle compact />
             <button
               type="button"
               aria-label="管理连接"

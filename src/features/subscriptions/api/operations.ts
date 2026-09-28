@@ -4,7 +4,11 @@ import type { TargetId } from "@/core/nodes"
 import { isPlausibleToken } from "@/core/subscriptions"
 import { recordAudit } from "@/server/audit-log"
 import { subscriptionPublicOrigin } from "@/server/subscription-origin"
-import { subscriptionDelivery, subscriptionPublishing } from "@/server/subscription-services"
+import {
+  checkSubscriptionNow,
+  subscriptionDelivery,
+  subscriptionPublishing,
+} from "@/server/subscription-services"
 import { AdminFailure } from "@/shared/admin-error"
 import type {
   AppendSubscriptionPayload,
@@ -197,7 +201,12 @@ export async function readSubscriptionSnapshot({
   id: string
   target: string
 }): Promise<{
-  snapshot: { content: string; nodeCount: number; subscriptionVersion: number } | null
+  snapshot: {
+    content: string
+    nodeCount: number
+    subscriptionVersion: number
+    responseHeaders: Record<string, string>
+  } | null
 }> {
   if (!TARGET_IDS.includes(target as TargetId)) {
     throw new AdminFailure("invalid_request", `Unsupported client: ${target}`)
@@ -209,8 +218,36 @@ export async function readSubscriptionSnapshot({
       content: artifact.content,
       nodeCount: artifact.nodeCount,
       subscriptionVersion: artifact.subscriptionVersion,
+      // The upstream's own metadata rides along — subscription-userinfo is what the traffic card
+      // renders, and callers that do not care simply ignore it.
+      responseHeaders: artifact.responseHeaders,
     },
   }
+}
+
+/** The 检查 button: recompile now and report. Audited so a manual check leaves a trace. */
+export async function checkSubscription({ id }: { id: string }) {
+  const result = await checkSubscriptionNow(id)
+  void recordAudit("subscription_check", {
+    id,
+    ok: result.ok,
+    nodeCount: result.nodeCount,
+    error: result.error.slice(0, 200),
+    durationMs: result.durationMs,
+  })
+  return result
+}
+
+/**
+ * The upstream's `subscription-userinfo` header from the stored artifact — the traffic and expiry
+ * the airport reports, without fetching the document body. Null when there is no artifact or the
+ * upstream never sent it.
+ */
+export async function readSubscriptionUserinfo({ id }: { id: string }) {
+  const record = await subscriptionPublishing().get(id)
+  if (!record) throw new AdminFailure("not_found", "Subscription not found.")
+  const artifact = await subscriptionDelivery().readSnapshot(id, record.defaultTarget)
+  return { userinfo: artifact?.responseHeaders["subscription-userinfo"] ?? null }
 }
 
 export async function removeSubscription({ id }: { id: string }): Promise<void> {

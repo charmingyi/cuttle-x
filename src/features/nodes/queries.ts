@@ -98,3 +98,21 @@ export function useImportNodes() {
     onError: (error) => showError(error, "导入节点失败。"),
   })
 }
+
+export function useCheckNodes() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[] | undefined) => api.checkNodes({ data: { ids } }),
+    onSuccess: async (payload) => {
+      await client.invalidateQueries({ queryKey: keys.nodes })
+      const ok = payload.results.filter((r) => r.ok).length
+      const total = payload.results.length
+      if (ok === total) {
+        showSuccess(`拨测完成：${total} 个节点全部可达`)
+      } else {
+        showSuccess(`拨测完成：${ok}/${total} 个可达，${total - ok} 个失败`)
+      }
+    },
+    onError: (error) => showError(error, "拨测失败。"),
+  })
+}

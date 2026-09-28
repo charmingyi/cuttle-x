@@ -41,3 +41,8 @@ export const importNodes = createServerFn({ method: "POST" })
   .middleware([adminFunctionMiddleware])
   .validator((input: { nodes: unknown }) => input)
   .handler(({ data }) => operations.importNodes(data as { nodes: CanonicalNode[] }))
+
+export const checkNodes = createServerFn({ method: "POST" })
+  .middleware([adminFunctionMiddleware])
+  .validator((input: { ids?: string[] }) => input)
+  .handler(({ data }) => operations.checkNodesOperation(data))

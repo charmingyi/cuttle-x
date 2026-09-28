@@ -1,17 +1,11 @@
-import {
-  IconDatabase,
-  IconHistory,
-  IconMenu2,
-  IconServer2,
-  IconTransform,
-} from "@tabler/icons-react"
+import { IconDatabase, IconHistory, IconMenu2, IconServer2 } from "@tabler/icons-react"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import type { ComponentType, RefObject } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTokenUsable } from "@/features/session"
 
-export type AppPage = "extract" | "nodes" | "subscriptions" | "audit"
+export type AppPage = "nodes" | "subscriptions" | "audit"
 
 interface NavEntry {
   /** Reads from the admin API, so it stays hidden until the key works. */
@@ -24,14 +18,6 @@ interface NavEntry {
 }
 
 const NAV_ENTRIES: NavEntry[] = [
-  {
-    page: "extract",
-    to: "/",
-    label: "提取转换",
-    compactLabel: "转换",
-    icon: IconTransform,
-    admin: false,
-  },
   {
     page: "nodes",
     to: "/nodes",

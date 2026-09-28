@@ -1,38 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { ExtractWorkbench } from "@/features/extract"
-import type { StepKey } from "@/features/extract"
-import { AppShell, ConnectionGate } from "@/features/shell"
-
-export interface ExtractSearch {
-  step?: StepKey
-}
-
-const STEP_VALUES = new Set<StepKey>(["source", "process", "output"])
-
-function isStepKey(value: unknown): value is StepKey {
-  return typeof value === "string" && STEP_VALUES.has(value as StepKey)
-}
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
 /**
- * Input from the address bar is not to be trusted: an invalid `step` falls back to no parameter at
- * all — which is the first step — rather than throwing. A hand-mangled URL should open the workbench
- * at its first step, not an error page.
+ * The workbench was removed: nodes, subscriptions and the audit log cover its flows now. The root
+ * keeps existing so old links and the brand mark land somewhere real — the node library, which is
+ * where the "import once, reference everywhere" loop starts.
  */
-function parseExtractSearch(input: Record<string, unknown>): ExtractSearch {
-  return isStepKey(input.step) ? { step: input.step } : {}
-}
-
 export const Route = createFileRoute("/")({
-  validateSearch: parseExtractSearch,
-  component: ExtractPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/nodes", replace: true })
+  },
 })
-
-function ExtractPage() {
-  return (
-    <AppShell active="extract">
-      <ConnectionGate>
-        <ExtractWorkbench />
-      </ConnectionGate>
-    </AppShell>
-  )
-}

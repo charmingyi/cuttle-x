@@ -6,11 +6,14 @@ import {
   IconListDetails,
   IconLoader2,
   IconPlus,
+  IconQrcode,
+  IconRefresh,
   IconTrash,
   IconX,
 } from "@tabler/icons-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
+import { QRCode } from "react-qr-code"
 import { cn } from "tailwind-variants"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -30,21 +33,26 @@ import { targetLabel } from "@/core/nodes"
 import type { CanonicalNode } from "@/core/nodes"
 import { DEFAULT_FRESH_ARTIFACT_MS } from "@/core/subscriptions"
 import type { SubscriptionRecord, SubscriptionSummary } from "@/core/subscriptions"
-import { NodeTable } from "@/features/extract/node-table"
+import { NodeTable } from "@/features/nodes/node-table"
 import { describeProcessor } from "@/features/rules"
 import { useWebWorker } from "@/shared/web-worker"
+import { CLIENT_IMPORTS } from "./client-import"
 import { inspectSnapshot } from "./inspect-snapshot"
 import type { InspectedSnapshot } from "./inspect-snapshot"
 import type { InspectRequest, InspectResponse } from "./inspect-snapshot.worker"
 import { describeLastCompile, describeSource } from "./labels"
 import {
   useAppendSubscriptionNodes,
+  useCheckSubscription,
   useRegisterSubscriptionLink,
+  useSubscriptionLink,
   useSubscriptionSnapshot,
+  useSubscriptionUserinfo,
 } from "./queries"
 import { SOURCE_TYPE_LABELS } from "./source-types"
 import { LABEL, StateLabel } from "./subscription-row"
 import type { SubscriptionRowActions } from "./subscription-row"
+import { parseUserinfo, formatBytes } from "./userinfo"
 
 /** Kept out of the hook so the same worker module is never described two ways. */
 function createInspectWorker() {
@@ -219,14 +227,23 @@ export function SubscriptionDetailDialog({
   // What the operator asked for, which is not yet what the surface shows: the preview opens only
   // once it has something to open onto.
   const [previewWanted, setPreviewWanted] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [appendOpen, setAppendOpen] = useState(false)
   const [appendContent, setAppendContent] = useState("")
   const [legacyLink, setLegacyLink] = useState("")
+  const [linkCopied, setLinkCopied] = useState(false)
   const append = useAppendSubscriptionNodes()
   const registerLink = useRegisterSubscriptionLink()
+  const check = useCheckSubscription()
   const preview = useNodePreview(subscription, previewWanted)
   const poolSubscription = subscription.sourceType === "pool"
   const previewOpen = previewWanted && preview.status !== "loading"
+
+  // Traffic/expiry come from the stored artifact's upstream header; the share section reads the
+  // live link. Both belong to the open dialog and quiet down with it.
+  const { userinfo: userinfoHeader } = useSubscriptionUserinfo(subscription.id, open)
+  const { url: linkUrl } = useSubscriptionLink(subscription.id, open)
+  const traffic = parseUserinfo(userinfoHeader)
 
   async function submitAppend() {
     if (!appendContent.trim() || append.isPending) return
@@ -291,6 +308,116 @@ export function SubscriptionDetailDialog({
             />
             <Stat label="快照版本" value={`v${subscription.version}`} />
           </div>
+
+          {traffic ? (
+            <div className="flex flex-col gap-2 border-b bg-sidebar p-4 md:px-6 md:py-4.5">
+              <span className={LABEL}>上游流量 · {subscription.name}</span>
+              <div className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="font-medium">
+                  已用 {formatBytes(traffic.upload + traffic.download)}
+                  {traffic.total > 0 ? ` / ${formatBytes(traffic.total)}` : ""}
+                </span>
+                <span className="text-muted-foreground">
+                  {traffic.expire > 0
+                    ? `${new Date(traffic.expire * 1000).toLocaleDateString("zh-CN")} 到期`
+                    : "到期时间未知"}
+                </span>
+              </div>
+              {traffic.total > 0 ? (
+                <div
+                  role="progressbar"
+                  aria-label="流量使用进度"
+                  aria-valuenow={Math.min(
+                    Math.round(((traffic.upload + traffic.download) / traffic.total) * 100),
+                    100,
+                  )}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="h-1.5 w-full overflow-hidden rounded bg-muted"
+                >
+                  <div
+                    className={cn(
+                      "h-full rounded",
+                      (traffic.upload + traffic.download) / traffic.total > 0.9
+                        ? "bg-destructive"
+                        : "bg-primary",
+                    )}
+                    style={{
+                      width: `${Math.min(((traffic.upload + traffic.download) / traffic.total) * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <Collapsible className="border-b" open={shareOpen} onOpenChange={setShareOpen}>
+            <CollapsibleTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex h-11 w-full items-center gap-2.5 px-4 text-left md:px-6"
+                />
+              }
+            >
+              <IconQrcode className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className={LABEL}>二维码 / 一键导入</span>
+              <IconChevronRight
+                className={cn(
+                  "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ease-out",
+                  shareOpen && "rotate-90",
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4 md:px-6">
+              {linkUrl ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start gap-4">
+                    <div className="shrink-0 rounded border bg-white p-2.5">
+                      <QRCode value={linkUrl} size={116} fgColor="#0f172a" />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        手机客户端扫码导入，或点击下方按钮跳转对应应用。
+                      </span>
+                      <p className="w-full break-all rounded bg-muted p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                        {linkUrl}
+                      </p>
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(linkUrl).then(() => {
+                              setLinkCopied(true)
+                              setTimeout(() => setLinkCopied(false), 2000)
+                            })
+                          }}
+                        >
+                          {linkCopied ? "已复制" : "复制链接"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {CLIENT_IMPORTS.map((target) => (
+                      <a
+                        key={target.client}
+                        href={target.href(linkUrl)}
+                        className="inline-flex h-8 items-center justify-center rounded border text-xs text-foreground transition-colors hover:bg-muted"
+                      >
+                        {target.client}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  这条订阅还没有可恢复的链接，请先在下方登记或轮换 token。
+                </span>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
 
           <Collapsible className="border-b" open={previewOpen} onOpenChange={setPreviewWanted}>
             <CollapsibleTrigger
@@ -399,6 +526,20 @@ export function SubscriptionDetailDialog({
         </div>
 
         <DialogFooter className="flex-none flex-row gap-2 border-t p-3 md:px-6 md:py-3.5">
+          <Button
+            variant="outline"
+            size="lg"
+            className="flex-1 md:h-10 md:flex-none"
+            disabled={check.isPending}
+            onClick={() => check.mutate(subscription.id)}
+          >
+            {check.isPending ? (
+              <IconLoader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <IconRefresh data-icon="inline-start" />
+            )}
+            {check.isPending ? "检查中" : "立即检查"}
+          </Button>
           {poolSubscription ? (
             <Button
               variant="outline"

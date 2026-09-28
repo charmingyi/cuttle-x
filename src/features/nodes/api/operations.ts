@@ -2,6 +2,7 @@ import type { CanonicalNode } from "@/core/nodes"
 import { canonicalToNodeForm, validateNodeForm } from "@/core/nodes/entity"
 import type { NodeFormData } from "@/core/nodes/entity"
 import { recordAudit } from "@/server/audit-log"
+import { checkNodes } from "@/server/node-check"
 import { nodeRepository } from "@/server/node-services"
 import { AdminFailure } from "@/shared/admin-error"
 import type { NodeListPayload, NodePayload, ImportNodesPayload } from "./contract"
@@ -125,4 +126,12 @@ export async function importNodes({
   const created = forms.length > 0 ? await nodeRepository().createMany(forms) : []
   void recordAudit("node_import", { imported: created.length, errors: errors.length })
   return { imported: created.length, errors, nodes: created }
+}
+
+/** TCP-dial saved nodes (all of them, or just `ids`) and persist the outcomes. */
+export function checkNodesOperation({ ids }: { ids?: string[] }) {
+  if (ids !== undefined && (!Array.isArray(ids) || ids.length > 500)) {
+    throw new AdminFailure("invalid_request", "节点列表无效。")
+  }
+  return checkNodes(ids)
 }

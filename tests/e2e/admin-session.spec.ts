@@ -102,7 +102,9 @@ test("a wrong password stays in the panel until the server accepts it", async ({
 
   await expect(keyField(page)).toBeVisible()
   await expect(page.getByText("Unauthorized.")).toBeVisible()
-  await expect(connectionState(page)).toHaveText("未连接")
+  // The panel is a dialog: while it is open the banner is aria-hidden, so the connection state is
+  // unreadable here. The key staying out of storage is the disconnection fact this step asserts.
+  expect(await storedKey(page)).toBeNull()
 
   await keyField(page).fill(GOOD_KEY)
   await submitButton(page).click()
@@ -123,13 +125,13 @@ test("disconnecting closes the panel and leaves the admin page", async ({ page }
   await expect(page).toHaveURL("/subscriptions?connect=true")
   await disconnectButton(page).click()
 
-  // One navigation does both jobs: `/` is the one page that works without a key, and leaving for it
-  // drops the search param the panel lives in.
-  await expect(page).toHaveURL("/")
-  await expect(keyField(page)).toBeHidden()
+  // One navigation does both jobs: leaving for `/` drops the search param the panel lives in, and
+  // `/` itself redirects to /nodes — there is no public page anymore, so the gate is what a
+  // disconnected visitor meets.
+  await expect(page).toHaveURL("/nodes")
+  await expect(page.getByText("请输入访问密码")).toBeVisible()
   await expect(connectionState(page)).toHaveText("未连接")
   await expect(adminNavEntry(page)).toBeHidden()
-  await expect(page.getByRole("dialog", { name: "已断开连接" })).toBeVisible()
   expect(await storedKey(page)).toBeNull()
 })
 
@@ -137,15 +139,18 @@ test("a stored wrong password is rejected before protected content renders", asy
   await armSession(page, BAD_KEY)
   await page.goto("/")
 
+  // `/` redirects to /nodes, and the gate's probe refuses the armed key before any protected
+  // content renders — the refusal itself opens the panel, so the fix happens right there.
+  await expect(page).toHaveURL("/nodes")
   await expect(keyField(page)).toBeVisible()
-  await expect(connectionState(page)).toHaveText("未连接")
-  await expect(adminNavEntry(page)).toBeHidden()
-  expect(await storedKey(page)).toBeNull()
+  await expect(page.getByText("请输入访问密码")).toBeVisible()
+  await expect.poll(() => storedKey(page), { timeout: 5_000 }).toBeNull()
 
   await keyField(page).fill(GOOD_KEY)
   await submitButton(page).click()
   await expect(connectionState(page)).toHaveText("已连接")
   await expect(adminNavEntry(page)).toBeVisible()
+  await expect(page.getByRole("heading", { name: "节点管理" })).toBeVisible()
 })
 
 test("going back closes the panel instead of leaving the page", async ({ page }) => {
