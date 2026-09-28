@@ -43,7 +43,7 @@ import {
 } from "./audit-entry"
 import type { KindFilter } from "./audit-entry"
 import { describeDevice, parseUserAgent } from "./device"
-import { useAuditLog } from "./queries"
+import { AUDIT_REFRESH_MS, useAuditLog } from "./queries"
 
 const META = "text-xs text-muted-foreground"
 
@@ -175,7 +175,7 @@ export function AuditLog() {
   const [filter, setFilter] = useState<KindFilter>("all")
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<AuditEntry | null>(null)
-  const { data, error, isLoading, refetch, isFetching } = useAuditLog()
+  const { data, dataUpdatedAt, error, isLoading, refetch, isFetching } = useAuditLog()
 
   const entries = useMemo(
     () =>
@@ -188,7 +188,11 @@ export function AuditLog() {
   const stats = useMemo(() => auditStats(data?.entries ?? []), [data])
 
   return (
-    <div className="flex flex-1 flex-col">
+    // `min-h-0` is what keeps the panel inside the viewport: without it this column grows to the
+    // height of the list, the list never becomes the thing that scrolls, and the status line — the
+    // one that says the page is live and when it last refreshed — ends up thousands of pixels below
+    // the fold.
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-12 flex-none items-center justify-between gap-2.5 border-b px-4 md:px-5">
         <h1 className="shrink-0 text-xs font-semibold tracking-widest uppercase">审计日志</h1>
         <div className="flex min-w-0 items-center gap-2">
@@ -255,6 +259,12 @@ export function AuditLog() {
         <Metric label="涉及订阅" note="被拉取过的" value={stats.subscriptions} />
       </div>
 
+      {/* The scope, stated where it would otherwise be assumed: this log sees subscription pulls,
+          not the traffic those subscriptions later carry. */}
+      <p className="flex-none border-b px-4 py-1.5 text-[11px] text-muted-foreground md:px-5">
+        代理流量不经过本工具：下面记录的是每台设备在什么时间拉取了哪条订阅、内容来自哪些上游站点。
+      </p>
+
       {error ? (
         <Empty className="flex-1 border-b">
           <EmptyHeader>
@@ -298,7 +308,12 @@ export function AuditLog() {
                   <TableHead className="w-24">时间</TableHead>
                   <TableHead>设备</TableHead>
                   <TableHead>订阅 / 内容</TableHead>
-                  <TableHead className="hidden lg:table-cell">上游站点</TableHead>
+                  <TableHead
+                    className="hidden lg:table-cell"
+                    title="订阅内容读自哪个上游站点，不是这台设备访问过的网站"
+                  >
+                    内容来源
+                  </TableHead>
                   <TableHead className="text-right">结果</TableHead>
                 </TableRow>
               </TableHeader>
@@ -378,14 +393,25 @@ export function AuditLog() {
         </>
       )}
 
-      <div className="flex h-9 flex-none items-center justify-between border-t px-4 text-[11px] text-muted-foreground md:px-5">
-        <span>
-          共 {entries.length} 条{filter === "all" && !search ? "" : "（已筛选）"} · 每 30 秒自动刷新
+      <div className="flex h-9 flex-none items-center justify-between gap-3 border-t px-4 text-[11px] text-muted-foreground md:px-5">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span
+              aria-hidden
+              className={cn("size-1.5 rounded-full bg-success", isFetching && "animate-pulse")}
+            />
+            实时刷新
+          </span>
+          <span className="truncate">
+            共 {entries.length} 条{filter === "all" && !search ? "" : "（已筛选）"} · 每{" "}
+            {AUDIT_REFRESH_MS / 1000} 秒
+            {dataUpdatedAt ? ` · 更新于 ${formatTime(new Date(dataUpdatedAt).toISOString())}` : ""}
+          </span>
         </span>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="inline-flex items-center gap-1 hover:text-foreground"
+          className="inline-flex shrink-0 items-center gap-1 hover:text-foreground"
         >
           <IconRefresh className="size-3" />
           刷新
