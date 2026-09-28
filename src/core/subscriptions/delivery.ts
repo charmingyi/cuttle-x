@@ -31,7 +31,7 @@ export type DeliveryOutcome =
   | { kind: "delivered"; delivery: DeliveryResult }
   | { kind: "not-found" }
   | { kind: "disabled" }
-  | { kind: "unavailable"; error: Error }
+  | { kind: "unavailable"; subscription: SubscriptionMetadata; error: Error }
 
 interface SubscriptionDeliveryOptions {
   freshArtifactMs?: number
@@ -65,6 +65,8 @@ export class SubscriptionDelivery {
     token: string,
     target?: TargetId,
     knownEtag?: string | null,
+    /** `force` skips the fresh-cache reuse and recompiles from the source — the health check's "now". */
+    options?: { force?: boolean },
   ): Promise<DeliveryOutcome> {
     if (!isPlausibleToken(token)) return { kind: "not-found" }
     const subscription = await this.repository.findMetadataByToken(token)
@@ -72,10 +74,12 @@ export class SubscriptionDelivery {
     if (!subscription.enabled) return { kind: "disabled" }
 
     const selectedTarget = target ?? subscription.defaultTarget
-    const cached = await this.repository.findArtifact(subscription.id, selectedTarget)
-    if (this.isReusable(cached, subscription)) {
-      const reused = await this.serve(subscription, cached, knownEtag, false)
-      if (reused) return { kind: "delivered", delivery: reused }
+    if (!options?.force) {
+      const cached = await this.repository.findArtifact(subscription.id, selectedTarget)
+      if (this.isReusable(cached, subscription)) {
+        const reused = await this.serve(subscription, cached, knownEtag, false)
+        if (reused) return { kind: "delivered", delivery: reused }
+      }
     }
 
     const refreshed = await this.refresh(subscription, selectedTarget)
@@ -96,7 +100,7 @@ export class SubscriptionDelivery {
           return { kind: "delivered", delivery: served }
         }
       }
-      return refreshed
+      return { kind: "unavailable", subscription, error: refreshed.error }
     }
 
     try {

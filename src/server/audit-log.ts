@@ -17,12 +17,15 @@ export const AUDIT_KINDS = [
   "node_delete",
   "node_bulk_delete",
   "node_import",
+  "node_check",
   "subscription_create",
   "subscription_update",
   "subscription_delete",
   "subscription_rotate",
   "subscription_reorder",
+  "subscription_check",
   "delivery",
+  "delivery_failed",
 ] as const
 
 export type AuditKind = (typeof AUDIT_KINDS)[number]
