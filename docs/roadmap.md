@@ -37,4 +37,4 @@
 
 - 测速已否决，不再需要 `cloudflare:sockets` 依赖。
 - 审计日志渲染需脱敏（IP 只保留前两段 / 国家+城市级）。
-- 仓库不含任何真实部署域名（`wrangler.json` 使用占位 `your-domain.example`，部署时通过 `wrangler deploy --var CUTTLE_PUBLIC_ORIGIN:https://实际域名` 注入）。
+- 仓库不含任何真实部署域名（`wrangler.json` 使用占位 `your-domain.example`）。想固定订阅链接的域名时用 `wrangler deploy --var CUTTLE_PUBLIC_ORIGIN:https://实际域名` 注入；不注入也不会发出占位地址——占位域名按未配置处理，链接回落到当前访问域名。
