@@ -22,18 +22,43 @@ function subscription(id: string, overrides: Partial<SubscriptionRecord> = {}): 
   }
 }
 
+/**
+ * A member pool whose nodes are distinct by name and by server. Both matter: merging is by node
+ * identity with the name left out of the comparison — a pool that reuses `host0` for every name
+ * would hand a collection two members that are the same node, and the count assertions below would
+ * be measuring the dedupe rather than the merge.
+ */
 function poolSource(names: string[]) {
   return {
     type: "pool" as const,
     content: JSON.stringify({
-      proxies: names.map((name, index) => ({
+      proxies: names.map((name) => ({
         type: "ss",
         name,
-        server: `host${index}.example.com`,
+        server: `${name}.example.com`,
         port: 8388,
         cipher: "aes-256-gcm",
         password: "password",
       })),
+    }),
+  }
+}
+
+/** One pool holding a single node whose server is fixed, so two members can name it differently. */
+function sharedServerPool(name: string) {
+  return {
+    type: "pool" as const,
+    content: JSON.stringify({
+      proxies: [
+        {
+          type: "ss",
+          name,
+          server: "shared.example.com",
+          port: 8388,
+          cipher: "aes-256-gcm",
+          password: "password",
+        },
+      ],
     }),
   }
 }
@@ -138,8 +163,8 @@ describe("collection delivery through D1", () => {
     expect(first.kind).toBe("delivered")
     if (first.kind !== "delivered") return
     expect(first.delivery.artifact.nodeCount).toBe(2)
-    expect(first.delivery.content).toContain("node-0")
-    expect(first.delivery.content).toContain("node-1")
+    expect(first.delivery.content).toContain("a-one")
+    expect(first.delivery.content).toContain("b-one")
 
     // Appending a node to one member must flow into the collection's next delivery.
     const grownA = subscription(poolA.id, {
@@ -186,5 +211,34 @@ describe("collection delivery through D1", () => {
     expect(outcome.kind).toBe("delivered")
     if (outcome.kind !== "delivered") return
     expect(outcome.delivery.artifact.nodeCount).toBe(2)
+  })
+
+  test("a node two members share is served once", async () => {
+    const repository = createRepository()
+    // Same server, port and credentials, different names: one node, by the same identity rule the
+    // pool append path applies. A collection is a view over its members, not a place where the same
+    // server comes back twice because two pools spell its name differently.
+    await repository.create(
+      subscription("col-shared-a", { source: sharedServerPool("共享节点") }),
+      "token-for-col-shared-a",
+    )
+    await repository.create(
+      subscription("col-shared-b", { source: sharedServerPool("SHARED") }),
+      "token-for-col-shared-b",
+    )
+
+    const collectionToken = "e".repeat(64)
+    await repository.create(
+      subscription("col-shared-collection", {
+        source: { type: "collection", memberIds: ["col-shared-a", "col-shared-b"] },
+      }),
+      collectionToken,
+    )
+
+    const delivery = new SubscriptionDelivery(repository, { freshArtifactMs: 0 })
+    const outcome = await delivery.deliver(collectionToken, TARGET)
+    expect(outcome.kind).toBe("delivered")
+    if (outcome.kind !== "delivered") return
+    expect(outcome.delivery.artifact.nodeCount).toBe(1)
   })
 })
