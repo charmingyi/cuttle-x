@@ -1,4 +1,5 @@
 import {
+  IconActivity,
   IconAlertTriangle,
   IconCloudDownload,
   IconCopy,
@@ -48,6 +49,7 @@ import { renderUriNode } from "@/core/nodes/targets/shared/uri-node"
 import { useDeferredClose } from "@/shared/deferred-close"
 import { showSuccess } from "@/shared/notify"
 import {
+  useCheckNodes,
   useCreateNode,
   useImportNodes,
   useNodes,
@@ -67,6 +69,26 @@ const TOOLBAR_ROW =
   "flex h-12 flex-none items-center justify-between gap-2.5 border-b px-4 md:gap-3 md:px-5"
 const TOOLBAR_TITLE = "shrink-0 text-xs font-semibold tracking-widest uppercase"
 const CRED_LABEL = "text-[12.5px] font-medium leading-relaxed text-muted-foreground"
+
+/**
+ * The last reachability probe as a one-word verdict. Unprobed stays quiet rather than showing a
+ * gray placeholder: before a first 拨测 the column would only repeat "no data" sixty times.
+ */
+function CheckBadge({ node }: { node: NodeEntity }) {
+  if (node.lastCheckOk === null) return null
+  if (node.lastCheckOk) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-success/10 px-1.5 py-0.5 text-[11px] font-medium text-success tabular-nums">
+        {node.lastCheckMs ?? 0}ms
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+      不可达
+    </span>
+  )
+}
 
 function emptyForm(): NodeFormData {
   return { name: "", type: "ss", server: "", port: 443 }
@@ -101,28 +123,27 @@ function formFromNode(node: NodeEntity): NodeFormData {
   }
 }
 
+/** Controlled protocol fields. Form state lives with the sheet footer so 保存 can read it. */
 function NodeEditor({
   values,
-  onSave,
-  onClose,
+  onChange,
 }: {
   values: NodeFormData
-  onSave: (data: NodeFormData) => Promise<boolean>
-  onClose: () => void
+  onChange: (values: NodeFormData) => void
 }) {
-  const [form, setForm] = useState(values)
+  const form = values
 
   const protocolFields = useMemo(() => PROTOCOL_FIELDS[form.type] ?? [], [form.type])
 
   function set<K extends keyof NodeFormData>(key: K, value: NodeFormData[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    onChange({ ...form, [key]: value })
   }
 
   function setCredential(key: string, value: string) {
-    setForm((prev) => ({
-      ...prev,
-      credentials: { ...prev.credentials, [key]: value },
-    }))
+    onChange({
+      ...form,
+      credentials: { ...form.credentials, [key]: value },
+    })
   }
 
   function credentialValue(key: string): string {
@@ -130,13 +151,8 @@ function NodeEditor({
     return typeof val === "string" || typeof val === "number" ? String(val) : ""
   }
 
-  async function handleSave() {
-    const ok = await onSave(form)
-    if (ok) onClose()
-  }
-
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4">
       <div className="grid gap-3">
         {/* 名称 */}
         <div className="grid gap-1.5">
@@ -256,13 +272,6 @@ function NodeEditor({
           </div>
         ) : null}
       </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>
-          取消
-        </Button>
-        <Button onClick={handleSave}>保存</Button>
-      </div>
     </div>
   )
 }
@@ -279,6 +288,9 @@ export function NodeManager() {
   const [editing, setEditing] = useState<{ node: NodeEntity } | { form: NodeFormData } | null>(null)
   const editorOpen = editing !== null
   const editorSurface = useDeferredClose(editorOpen, () => setEditing(null))
+  // The form state of the open editor. Held beside `editing` rather than inside it so the pinned
+  // footer can read it; reset whenever the editor opens or closes.
+  const [editorForm, setEditorForm] = useState<NodeFormData | null>(null)
 
   const [importOpen, setImportOpen] = useState(false)
   const importSurface = useDeferredClose(importOpen, () => setImportOpen(false))
@@ -292,6 +304,7 @@ export function NodeManager() {
   const qrSurface = useDeferredClose(qrOpen, () => setQrNode(null))
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const checkNodes = useCheckNodes()
 
   function toggleSelected(id: string) {
     setSelected((current) => {
@@ -367,22 +380,43 @@ export function NodeManager() {
     setParseError(null)
   }
 
-  const openCreate = useCallback(() => setEditing({ form: emptyForm() }), [])
+  const openCreate = useCallback(() => {
+    const form = emptyForm()
+    setEditing({ form })
+    setEditorForm(form)
+  }, [])
 
-  const openEdit = useCallback((node: NodeEntity) => setEditing({ node }), [])
+  const openEdit = useCallback((node: NodeEntity) => {
+    const form = formFromNode(node)
+    setEditing({ node })
+    setEditorForm(form)
+  }, [])
 
-  async function handleSave(data: NodeFormData): Promise<boolean> {
-    if (!editing) return false
+  async function handleSave(): Promise<boolean> {
+    if (!editing || !editorForm) return false
     try {
       if ("node" in editing) {
-        await update.mutateAsync({ id: editing.node.id, data })
+        await update.mutateAsync({ id: editing.node.id, data: editorForm })
       } else {
-        await create.mutateAsync(data)
+        await create.mutateAsync(editorForm)
       }
       return true
     } catch {
       return false
     }
+  }
+
+  async function handleSaveClick() {
+    const ok = await handleSave()
+    if (ok) {
+      setEditing(null)
+      setEditorForm(null)
+    }
+  }
+
+  function closeEditor() {
+    setEditing(null)
+    setEditorForm(null)
   }
 
   function listBody() {
@@ -473,9 +507,12 @@ export function NodeManager() {
             <IconServer2 className="size-4 shrink-0 text-muted-foreground" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-medium truncate">{node.name}</span>
-              <span className="text-[12px] text-muted-foreground truncate">
-                {node.type.toUpperCase()} · {node.server}:{node.port}
-                {node.country ? ` · ${node.country}` : ""}
+              <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                <span className="truncate">
+                  {node.type.toUpperCase()} · {node.server}:{node.port}
+                  {node.country ? ` · ${node.country}` : ""}
+                </span>
+                <CheckBadge node={node} />
               </span>
             </div>
             <div className="flex shrink-0 gap-1">
@@ -511,12 +548,6 @@ export function NodeManager() {
       </div>
     )
   }
-
-  const editorValues = editing
-    ? "node" in editing
-      ? formFromNode(editing.node)
-      : editing.form
-    : null
 
   return (
     <div className="flex flex-1 flex-col">
@@ -563,6 +594,20 @@ export function NodeManager() {
           <Button
             size="xs"
             variant="outline"
+            title={someSelected ? "拨测选中的节点" : "拨测全部节点"}
+            disabled={checkNodes.isPending || nodes.length === 0}
+            onClick={() => checkNodes.mutate(someSelected ? [...selected] : undefined)}
+          >
+            {checkNodes.isPending ? (
+              <IconLoader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <IconActivity data-icon="inline-start" />
+            )}
+            <span className="hidden sm:inline">拨测</span>
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
             title="导入分享链接"
             onClick={() => setImportOpen(true)}
           >
@@ -579,7 +624,7 @@ export function NodeManager() {
 
       {listBody()}
 
-      {editorValues ? (
+      {editorForm ? (
         <Sheet
           open={editorSurface.open}
           onOpenChange={editorSurface.onOpenChange}
@@ -589,13 +634,20 @@ export function NodeManager() {
             <SheetHeader>
               <SheetTitle>{editing && ("node" in editing ? "编辑节点" : "新建节点")}</SheetTitle>
             </SheetHeader>
-            <div>
+            {/* The body scrolls; the footer stays pinned so 保存 is reachable no matter how many
+                protocol fields a protocol adds. */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <NodeEditor
                 key={editing && ("node" in editing ? editing.node.id : "new")}
-                values={editorValues}
-                onSave={handleSave}
-                onClose={() => setEditing(null)}
+                values={editorForm}
+                onChange={setEditorForm}
               />
+            </div>
+            <div className="flex flex-none items-center justify-end gap-2 border-t p-4">
+              <Button variant="outline" onClick={closeEditor}>
+                取消
+              </Button>
+              <Button onClick={() => void handleSaveClick()}>保存</Button>
             </div>
           </SheetContent>
         </Sheet>
@@ -610,74 +662,75 @@ export function NodeManager() {
           <SheetHeader>
             <SheetTitle>导入分享链接</SheetTitle>
           </SheetHeader>
-          <div className="flex flex-col gap-4 p-4">
-            <div className="grid gap-1.5">
-              <Label className={CRED_LABEL}>分享链接</Label>
-              <Textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder="ss://... 一行一个链接"
-                rows={6}
-              />
-            </div>
-
-            {parseError ? (
-              <Alert variant="destructive">
-                <IconAlertTriangle className="size-4" />
-                <AlertTitle>解析失败</AlertTitle>
-                <AlertDescription>{parseError}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {parsedNodes && parsedNodes.length > 0 ? (
-              <div className="grid gap-2">
-                <span className="text-[12.5px] font-medium text-muted-foreground">
-                  解析到 {parsedNodes.length} 个节点
-                </span>
-                <div className="max-h-48 overflow-y-auto rounded border divide-y text-sm">
-                  {parsedNodes.map((node) => (
-                    <div
-                      key={`${node.type}://${node.server}:${node.port}`}
-                      className="flex items-center gap-2 px-3 py-1.5"
-                    >
-                      <IconServer2 className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">
-                        {node.name || `${node.type}://${node.server}:${node.port}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-1.5">
+                <Label className={CRED_LABEL}>分享链接</Label>
+                <Textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="ss://... 一行一个链接"
+                  rows={6}
+                />
               </div>
-            ) : null}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setImportOpen(false)
-                  setImportText("")
-                  setParsedNodes(null)
-                  setParseError(null)
-                }}
-              >
-                取消
-              </Button>
-              <Button onClick={handleParse} disabled={!importText.trim()}>
-                {parsedNodes ? "重新解析" : "解析"}
-              </Button>
-              {parsedNodes && parsedNodes.length > 0 && (
-                <Button onClick={handleImport} disabled={importNodes.isPending}>
-                  {importNodes.isPending ? (
-                    <>
-                      <IconLoader2 className="size-4 animate-spin mr-1" />
-                      导入中...
-                    </>
-                  ) : (
-                    `导入 ${parsedNodes.length} 个节点`
-                  )}
-                </Button>
-              )}
+              {parseError ? (
+                <Alert variant="destructive">
+                  <IconAlertTriangle className="size-4" />
+                  <AlertTitle>解析失败</AlertTitle>
+                  <AlertDescription>{parseError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {parsedNodes && parsedNodes.length > 0 ? (
+                <div className="grid gap-2">
+                  <span className="text-[12.5px] font-medium text-muted-foreground">
+                    解析到 {parsedNodes.length} 个节点
+                  </span>
+                  <div className="max-h-48 overflow-y-auto rounded border divide-y text-sm">
+                    {parsedNodes.map((node) => (
+                      <div
+                        key={`${node.type}://${node.server}:${node.port}`}
+                        className="flex items-center gap-2 px-3 py-1.5"
+                      >
+                        <IconServer2 className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">
+                          {node.name || `${node.type}://${node.server}:${node.port}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
+          </div>
+          <div className="flex flex-none flex-wrap items-center justify-end gap-y-2 gap-2 border-t p-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportOpen(false)
+                setImportText("")
+                setParsedNodes(null)
+                setParseError(null)
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={handleParse} disabled={!importText.trim()}>
+              {parsedNodes ? "重新解析" : "解析"}
+            </Button>
+            {parsedNodes && parsedNodes.length > 0 && (
+              <Button onClick={handleImport} disabled={importNodes.isPending}>
+                {importNodes.isPending ? (
+                  <>
+                    <IconLoader2 className="size-4 animate-spin mr-1" />
+                    导入中...
+                  </>
+                ) : (
+                  `导入 ${parsedNodes.length} 个节点`
+                )}
+              </Button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
@@ -692,7 +745,7 @@ export function NodeManager() {
           </DialogHeader>
           {qrNode ? (
             <div className="flex flex-col items-center gap-3">
-              <div className="rounded border p-3">
+              <div className="rounded border bg-white p-3">
                 <QRCode value={nodeShareLink(qrNode)} size={192} fgColor="#0f172a" />
               </div>
               <p className="w-full max-w-full break-all rounded bg-muted p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
